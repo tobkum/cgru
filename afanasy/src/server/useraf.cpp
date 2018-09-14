@@ -174,6 +174,11 @@ void UserAf::addJob( JobAf * i_job)
 
 	updateTimeActivity();
 
+	// Add running counts (runnig tasks num and capacity total) to Af::Work
+	addRunningCounts(*i_job);
+	// Add renders counts (for max tasks per host) to AfNodeSolve
+	addRendersCounts(*i_job);
+
 	m_jobs_list.add( i_job );
 
 	m_jobs_num++;
@@ -186,6 +191,11 @@ void UserAf::addJob( JobAf * i_job)
 void UserAf::removeJob( JobAf * i_job)
 {
 	appendLog( std::string("Removing a job: ") + i_job->getName());
+
+	// Remove running counts (runnig tasks num and capacity total) from Af::Work
+	remRunningCounts(*i_job);
+	// Remove renders counts (for max tasks per host) from AfNodeSolve
+	remRendersCounts(*i_job);
 
 	m_jobs_list.remove( i_job );
 
@@ -262,35 +272,20 @@ bool UserAf::refreshCounters()
 {
 	int _numjobs = m_jobs_list.getCount();
 	int _numrunningjobs = 0;
-	int _runningtasksnumber = 0;
-	int _runningcapacitytotal = 0;
 
-	{
-		AfListIt jobsListIt( &m_jobs_list);
-		for( AfNodeSrv *job = jobsListIt.node(); job != NULL; jobsListIt.next(), job = jobsListIt.node())
-		{
-			if( ((JobAf*)job)->isRunning())
-			{
-				_numrunningjobs++;
-				_runningtasksnumber += ((JobAf*)job)->getRunningTasksNum();
-				_runningcapacitytotal += ((JobAf*)job)->getRunningCapacityTotal();
-			}
-		}
-	}
+	AfListIt jobsListIt(&m_jobs_list);
+	for (AfNodeSrv *job = jobsListIt.node(); job != NULL; jobsListIt.next(), job = jobsListIt.node())
+		if (((JobAf*)job)->isRunning())
+			_numrunningjobs++;
 
 	bool changed = false;
 
-	if(
-		( _numjobs              != m_jobs_num               ) ||
-		( _numrunningjobs       != m_running_jobs_num       ) ||
-		( _runningtasksnumber   != m_running_tasks_num      ) ||
-		( _runningcapacitytotal != m_running_capacity_total ) )
+	if (( _numjobs              != m_jobs_num               ) ||
+		( _numrunningjobs       != m_running_jobs_num       ))
 			changed = true;
 
 	m_jobs_num = _numjobs;
 	m_running_jobs_num = _numrunningjobs;
-	m_running_tasks_num = _runningtasksnumber;
-	m_running_capacity_total = _runningcapacitytotal;
 
 	return changed;
 }

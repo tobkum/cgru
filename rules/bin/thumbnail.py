@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import json
@@ -112,7 +111,7 @@ if Options.input.find(',') != -1 or os.path.isdir(Options.input):
                 elif cgruutils.isMovieExt(afile) and not Options.nomovie:
                     new_movie = os.path.join(root, afile)
                     new_mtime = int(os.path.getmtime(new_movie))
-                    if new_movie > cur_mtime:
+                    if new_mtime > cur_mtime:
                         Movie = new_movie
                         cur_mtime = new_mtime
 
@@ -181,6 +180,19 @@ if Movie is not None:
     # Try to get movie frames count:
     frame_count = 3 # < this will be the default value
     inf_obj = mediainfo.processMovie( Movie)
+
+    if 'error' in inf_obj:
+        if Options.verbose: print(inf_obj)
+        if 'data' in inf_obj:
+            data = inf_obj['data']
+            if Options.verbose: print(data)
+            data = re.findall('frame_count:\d*',data)
+            if len(data):
+                frame_count = int(data[0].split(':')[1])
+                print('frame_count:%d' % frame_count)
+        print(inf_obj['error'])
+        inf_obj = None
+
     if inf_obj and 'mediainfo' in inf_obj and 'video' in inf_obj['mediainfo']:
         frame_count = inf_obj['mediainfo']['video']['frame_count']
 
@@ -277,6 +289,9 @@ if Options.debug:
     sys.exit(0)
 
 for cmd in Cmds:
-    os.system(cmd)
+    if Options.verbose:
+        os.system(cmd)
+    else:
+        os.system(cmd + ' > /dev/null 2>&1')
 
 print(json.dumps(out))

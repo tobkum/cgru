@@ -545,7 +545,7 @@ function fu_PutMultiDo(i_wnd)
 /* ---------------- [ Archive structs and functions ] ---------------------------------------------------- */
 var fu_arch_params = {
 	dest: {'label': 'Destination'},
-	split: {'tooltip': 'Split archive size.'},
+	split: {'tooltip': 'Split archive size (MB).'},
 	af_capacity: {'label': 'Capacity', 'tooltip': 'Afanasy tasks capacity.', 'width': '25%'},
 	af_maxtasks:
 		{'label': 'Max Run Tasks', 'tooltip': 'Maximum running tasks.', 'width': '25%', 'lwidth': '150px'},
@@ -715,7 +715,9 @@ var fu_walk_params = {
 		"width": '33%'
 	},
 	mediainfo:
-		{"label": 'Get Media Info', 'type': "bool", 'default': false, "lwidth": '180px', "width": '33%'}
+		{"label": 'Get Media Info', 'type': "bool", 'default': false, "lwidth": '170px', "width": '34%'},
+	af_hostsmask: {'label': 'Hosts Mask', 'width': '50%', 'lwidth': '160px'},
+	af_paused: {'label': 'Paused', 'width': '50%', 'lwidth': '50px', 'type': 'bool'}
 };
 
 function fu_Walk(i_args)
@@ -761,6 +763,8 @@ function fu_WalkProcessGUI(i_wnd)
 
 	var job = {};
 	job.name = 'Walk ' + params.path;
+	job.hosts_mask = params.af_hostsmask;
+	job.offline = params.af_paused;
 
 	var block = {};
 	block.name = 'walk';
@@ -774,12 +778,13 @@ function fu_WalkProcessGUI(i_wnd)
 	block.tasks = [task];
 
 	var cmd = c_PathPM_Client2Server(RULES.walk.cmd);
+	cmd += ' --progress';
 	cmd += ' --thumb 128';
 	cmd += ' --report 256';
-	if (params.upparents == false)
-		cmd += ' -n';
+	if (params.upparents)
+		cmd += ' --upparents -1';
 	if (params.mediainfo)
-		cmd += ' -m';
+		cmd += ' --mediainfo';
 	cmd += ' -V ' + params.verbose;
 	cmd += ' "' + c_PathPM_Client2Server(params.path) + '"';
 	task.command = cmd;

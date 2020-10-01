@@ -19,7 +19,7 @@
 
 using namespace afqt;
 
-AttrNumber QEnvironment::level("level", "UI Level", AFGUI::PADAWAN );
+AttrNumber QEnvironment::level("level", "UI Level", AFGUI::PADAWAN);
 
 Attr       QEnvironment::theme("theme", "Theme", AFGUI::THEME );
 
@@ -91,11 +91,14 @@ AttrColor QEnvironment::clr_itemjobwarning(  "clr_itemjobwarning",   "Job Warnin
 AttrColor QEnvironment::clr_taskwarningrun(  "clr_taskwarningrun",   "Warning Run Task",        AFGUI::CLR_TASKWARNINGRUN      );
 AttrColor QEnvironment::clr_taskskipped(     "clr_taskskipped",      "Skipped Task",            AFGUI::CLR_TASKSKIPPED         );
 AttrColor QEnvironment::clr_taskwaitreconn(  "clr_taskwaitreconn",   "Waiting Reconnect Task",  AFGUI::CLR_TASKWAITRECONN      );
+AttrColor QEnvironment::clr_tasktrynext(     "clr_tasktrynext",      "Trying This Task Next",   AFGUI::CLR_TASKTRYNEXT         );
 AttrColor QEnvironment::clr_itemrender(      "clr_itemrender",       "Render Item",             AFGUI::CLR_ITEMRENDER          );
 AttrColor QEnvironment::clr_itemrenderoff(   "clr_itemrenderoff",    "Offine Render",           AFGUI::CLR_ITEMRENDEROFF       );
 AttrColor QEnvironment::clr_itemrenderbusy(  "clr_itemrenderbusy",   "Busy Render",             AFGUI::CLR_ITEMRENDERBUSY      );
-AttrColor QEnvironment::clr_itemrendernimby( "clr_itemrendernimby",  "Render With Nimby",       AFGUI::CLR_ITEMRENDERNIMBY     );
+AttrColor QEnvironment::clr_itemrendernimby( "clr_itemrendernimby",  "Render With nimby",       AFGUI::CLR_ITEMRENDERnimby     );
+AttrColor QEnvironment::clr_itemrenderNIMBY( "clr_itemrenderNIMBY",  "Render With NIMBY",       AFGUI::CLR_ITEMRENDERNIMBY     );
 AttrColor QEnvironment::clr_itemrenderpaused("clr_itemrenderpaused", "Paused Render",           AFGUI::CLR_ITEMRENDERPAUSED    );
+AttrColor QEnvironment::clr_itemrendersick(  "clr_itemrendersick",   "Sick Render",             AFGUI::CLR_ITEMRENDERSICK      );
 AttrColor QEnvironment::clr_itemrenderpltclr("clr_itemrenderpltclr", "Plotter Text Label",      AFGUI::CLR_ITEMRENDERPLTCLR    );
 AttrColor QEnvironment::clr_running(         "clr_running",          "Running Bar",             AFGUI::CLR_RUNNING             );
 AttrColor QEnvironment::clr_done(            "clr_done",             "Done Bar",                AFGUI::CLR_DONE                );
@@ -122,6 +125,7 @@ QString QEnvironment::ms_themes_folder;
 
 QFont QEnvironment::f_name;
 QFont QEnvironment::f_info;
+QFont QEnvironment::f_muted;
 QFont QEnvironment::f_plotter;
 QFont QEnvironment::f_min;
 QList<Attr*>     QEnvironment::ms_attrs_prefs;
@@ -129,6 +133,7 @@ QList<AttrRect*> QEnvironment::ms_attrs_wndrects;
 QList<Attr*>     QEnvironment::ms_attrs_gui;
 QMap<QString,Attr*> QEnvironment::ms_attrs_hotkeys;
 QStringList QEnvironment::ms_hotkeys_names;
+QMap<QString, AttrNumber> QEnvironment::ms_attrs_panel;
 
 bool QEnvironment::ms_valid = false;
 
@@ -157,7 +162,7 @@ QEnvironment::QEnvironment( const QString & i_name)
     ms_attrs_prefs.append( &ntf_job_error_alert );
     ms_attrs_prefs.append( &ntf_job_error_sound );
 
-    ms_attrs_gui.append( &image_back            );
+	ms_attrs_gui.append( &image_back            );
     ms_attrs_gui.append( &image_border_top      );
     ms_attrs_gui.append( &image_border_topleft  );
     ms_attrs_gui.append( &image_border_topright );
@@ -214,7 +219,9 @@ QEnvironment::QEnvironment( const QString & i_name)
     ms_attrs_gui.append( &clr_itemrenderoff   );
     ms_attrs_gui.append( &clr_itemrenderbusy  );
     ms_attrs_gui.append( &clr_itemrendernimby );
+    ms_attrs_gui.append( &clr_itemrenderNIMBY );
     ms_attrs_gui.append( &clr_itemrenderpaused);
+    ms_attrs_gui.append( &clr_itemrendersick  );
     ms_attrs_gui.append( &clr_itemrenderpltclr);
     ms_attrs_gui.append( &clr_running         );
     ms_attrs_gui.append( &clr_done            );
@@ -229,6 +236,44 @@ QEnvironment::QEnvironment( const QString & i_name)
     ms_attrs_gui.append( &clr_textdone        );
     ms_attrs_gui.append( &clr_textstars       );
 
+	ms_attrs_panel["farm_pos"]               = AttrNumber("panel_farm_pos",               AFGUI::RIGHT);
+	ms_attrs_panel["farm_size_right_0"]      = AttrNumber("panel_farm_size_right_0",      600);
+	ms_attrs_panel["farm_size_right_1"]      = AttrNumber("panel_farm_size_right_1",      200);
+	ms_attrs_panel["farm_size_bottom_0"]     = AttrNumber("panel_farm_size_bottom_0",     600);
+	ms_attrs_panel["farm_size_bottom_1"]     = AttrNumber("panel_farm_size_bottom_1",     200);
+	ms_attrs_panel["jobs_pos"]               = AttrNumber("panel_jobs_pos",               AFGUI::RIGHT);
+	ms_attrs_panel["jobs_size_right_0"]      = AttrNumber("panel_jobs_size_right_0",      600);
+	ms_attrs_panel["jobs_size_right_1"]      = AttrNumber("panel_jobs_size_right_1",      200);
+	ms_attrs_panel["jobs_size_bottom_0"]     = AttrNumber("panel_jobs_size_bottom_0",     600);
+	ms_attrs_panel["jobs_size_bottom_1"]     = AttrNumber("panel_jobs_size_bottom_1",     200);
+	ms_attrs_panel["monitors_pos"]           = AttrNumber("panel_monitors_pos",           AFGUI::RIGHT);
+	ms_attrs_panel["monitors_size_right_0"]  = AttrNumber("panel_monitors_size_right_0",  600);
+	ms_attrs_panel["monitors_size_right_1"]  = AttrNumber("panel_monitors_size_right_1",  200);
+	ms_attrs_panel["monitors_size_bottom_0"] = AttrNumber("panel_monitors_size_bottom_0", 600);
+	ms_attrs_panel["monitors_size_bottom_1"] = AttrNumber("panel_monitors_size_bottom_1", 200);
+	ms_attrs_panel["tasks_pos"]              = AttrNumber("panel_tasks_pos",              AFGUI::RIGHT);
+	ms_attrs_panel["tasks_size_right_0"]     = AttrNumber("panel_tasks_size_right_0",     600);
+	ms_attrs_panel["tasks_size_right_1"]     = AttrNumber("panel_tasks_size_right_1",     200);
+	ms_attrs_panel["tasks_size_bottom_0"]    = AttrNumber("panel_tasks_size_bottom_0",    600);
+	ms_attrs_panel["tasks_size_bottom_1"]    = AttrNumber("panel_tasks_size_bottom_1",    200);
+	ms_attrs_panel["users_pos"]              = AttrNumber("panel_users_pos",              AFGUI::RIGHT);
+	ms_attrs_panel["users_size_right_0"]     = AttrNumber("panel_users_size_right_0",     600);
+	ms_attrs_panel["users_size_right_1"]     = AttrNumber("panel_users_size_right_1",     200);
+	ms_attrs_panel["users_size_bottom_0"]    = AttrNumber("panel_users_size_bottom_0",    600);
+	ms_attrs_panel["users_size_bottom_1"]    = AttrNumber("panel_users_size_bottom_1",    200);
+	ms_attrs_panel["work_pos"]               = AttrNumber("panel_work_pos",           AFGUI::RIGHT);
+	ms_attrs_panel["work_size_right_0"]      = AttrNumber("panel_work_size_right_0",  600);
+	ms_attrs_panel["work_size_right_1"]      = AttrNumber("panel_work_size_right_1",  200);
+	ms_attrs_panel["work_size_bottom_0"]     = AttrNumber("panel_work_size_bottom_0", 600);
+	ms_attrs_panel["work_size_bottom_1"]     = AttrNumber("panel_work_size_bottom_1", 200);
+	{
+		QMutableMapIterator<QString, AttrNumber> it(ms_attrs_panel);
+		while (it.hasNext())
+		{
+			it.next();
+			ms_attrs_prefs.append(&(it.value()));
+		}
+	}
 
 	// Hotkeys:
 	ms_hotkeys_names << "jobs_log";
@@ -272,7 +317,9 @@ QEnvironment::QEnvironment( const QString & i_name)
 
     ms_valid = true;
 
+AF_DEV << "nimby attrcolor: " << afqt::qtos(afqt::QEnvironment::clr_itemrendernimby.v_writeData());
     loadAttrs( ms_filename);
+AF_DEV << "nimby attrcolor: " << afqt::qtos(afqt::QEnvironment::clr_itemrendernimby.v_writeData());
 	bool theme_loaded = true;
     if( false == loadTheme( theme.str))
 	{
@@ -321,6 +368,9 @@ void QEnvironment::initFonts()
 	f_info.setBold(         true               );
 	f_info.setPointSize(    font_sizeinfo.n    );
 
+	f_muted.setItalic(      true               );
+	f_muted.setPointSize(   font_sizeinfo.n    );
+
 	f_min.setBold(          true               );
 	f_min.setPointSize(     font_sizemin.n     );
 
@@ -331,6 +381,7 @@ void QEnvironment::initFonts()
 	{
 		f_name.setFamily(           font_family.str        );
 		f_info.setFamily(           font_family.str        );
+		f_muted.setFamily(          font_family.str        );
 		f_min.setFamily(            font_family.str        );
 		f_plotter.setFamily(        font_family.str        );
 	}
@@ -616,3 +667,8 @@ void QEnvironment::setHotkey( const QString & i_name, const QString & i_str)
 		ms_attrs_hotkeys[i_name]->str = i_str;
 }
 
+const QString & QEnvironment::getDateTimeFormat()
+{
+	static const QString date_time_format("yyyy.MM.dd HH:mm:ss");
+	return date_time_format;
+}

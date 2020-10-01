@@ -82,9 +82,9 @@ void BlockData::initDefaults()
 	m_task_max_run_time /******/ = 0;
 	m_task_min_run_time /******/ = 0;
 	m_capacity = AFJOB::TASK_DEFAULT_CAPACITY;
-	m_need_memory /************/ = 0;
-	m_need_power /*************/ = 0;
-	m_need_hdd /***************/ = 0;
+	m_need_memory /************/ = -1;
+	m_need_power /*************/ = -1;
+	m_need_hdd /***************/ = -1;
 	m_errors_retries /*********/ = -1;
 	m_errors_avoid_host /******/ = -1;
 	m_errors_task_same_host /**/ = -1;
@@ -193,12 +193,14 @@ void BlockData::jsonRead(const JSON &i_object, std::string *io_changes)
 	}
 	jr_int32("max_running_tasks" /******/, m_max_running_tasks /******/, i_object, io_changes);
 	jr_int32("max_running_tasks_per_host", m_max_running_tasks_per_host, i_object, io_changes);
+	jr_string("srv_info" /**************/, m_srv_info /***************/, i_object, io_changes);
 	jr_string("custom_data" /***********/, m_custom_data /************/, i_object, io_changes);
 	jr_int32("parser_coeff" /***********/, m_parser_coeff /***********/, i_object, io_changes);
 	jr_int64("sequential" /*************/, m_sequential /*************/, i_object, io_changes);
 	jr_int64("time_started" /***********/, m_time_started /***********/, i_object, io_changes);
 	jr_int64("time_done" /**************/, m_time_done /**************/, i_object, io_changes);
 	jr_stringmap("environment" /********/, m_environment /************/, i_object, io_changes);
+	jr_intmap("tickets",                   m_tickets,                    i_object, io_changes);
 
 	if (m_capacity < 1) m_capacity = 1;
 
@@ -302,6 +304,41 @@ void BlockData::jsonReadTasks(const JSON &i_object)
 			}
 		}
 	}
+}
+
+void BlockData::jsonReadAndAppendTasks(const JSON &i_object)
+{
+	// This function is similar to jsonReadTasks but adds new tasks to the block
+	// instead of overriding the previous ones.
+
+	const JSON &tasks = i_object["tasks"];
+
+	if (!tasks.IsArray() || tasks.Size() == 0)
+		return;
+
+	TaskData **old_tasks_data = m_tasks_data;
+	int old_tasks_num = m_tasks_num;
+
+	m_tasks_num += tasks.Size();
+	m_tasks_data = new TaskData *[m_tasks_num];
+	for (int t = 0; t < m_tasks_num; t++)
+	{
+		if (t < old_tasks_num)
+		{
+			m_tasks_data[t] = old_tasks_data[t];
+			continue;
+		}
+
+		m_tasks_data[t] = createTask(tasks[t - old_tasks_num]);
+		if (m_tasks_data[t] == NULL)
+		{
+			AFERROR("BlockData::BlockData: Can not allocate memory for new task.")
+			break;
+		}
+	}
+
+	if (NULL != old_tasks_data)
+		delete [] old_tasks_data;
 }
 
 void BlockData::jsonWrite(std::ostringstream &o_str, const std::string &i_datamode) const
@@ -422,6 +459,8 @@ void BlockData::jsonWrite(std::ostringstream &o_str, int i_type) const
 				o_str << ",\n\"hosts_mask_exclude\":\"" << m_hosts_mask_exclude.getPattern() << "\"";
 			if (hasNeedProperties())
 				o_str << ",\n\"need_properties\":\"" << m_need_properties.getPattern() << "\"";
+			if (m_tickets.size()) af::jw_intmap("tickets", m_tickets, o_str);
+
 			o_str << ',';
 
 		case Msg::TBlocksProgress:
@@ -435,7 +474,7 @@ void BlockData::jsonWrite(std::ostringstream &o_str, int i_type) const
 			if (m_state != 0)
 			{
 				o_str << ",\n";
-				jw_state(m_state, o_str);
+				jw_stateJob(m_state, o_str);
 			}
 			if (m_job_id != 0) o_str << ",\n\"job_id\":" << m_job_id;
 
@@ -454,6 +493,9 @@ void BlockData::jsonWrite(std::ostringstream &o_str, int i_type) const
 			if (p_tasks_warning > 0) o_str << ",\n\"p_tasks_warning\":" << p_tasks_warning;
 			if (p_tasks_waitrec > 0) o_str << ",\n\"p_tasks_waitrec\":" << p_tasks_waitrec;
 			if (p_tasks_run_time > 0) o_str << ",\n\"p_tasks_run_time\":" << p_tasks_run_time;
+
+			if (m_srv_info.size())
+				o_str << ",\n\"srv_info\":\"" << m_srv_info << "\"";
 
 			//		if(( p_tasks_done < m_tasks_num ) ||
 			//		     p_tasks_error || m_running_tasks_counter )
@@ -581,6 +623,7 @@ void BlockData::v_readwrite(Msg *msg)
 			rw_int32_t(m_task_progress_change_timeout, msg);
 			rw_int32_t(m_task_max_run_time, msg);
 			rw_int32_t(m_task_min_run_time, msg);
+			rw_IntMap(m_tickets, msg);
 
 		case Msg::TBlocksProgress:
 
@@ -603,6 +646,8 @@ void BlockData::v_readwrite(Msg *msg)
 			rw_int32_t(m_block_num, msg);
 			rw_int64_t(m_time_started, msg);
 			rw_int64_t(m_time_done, msg);
+
+			rw_String(m_srv_info, msg);
 
 			rw_data(p_progressbar, msg, AFJOB::ASCII_PROGRESS_LENGTH);
 
@@ -1005,76 +1050,6 @@ int BlockData::getReadyTaskNumber(TaskProgress **i_tp, const int64_t &i_job_flag
 	// printf("No ready tasks found.\n");
 	return AFJOB::TASK_NUM_NO_TASK;
 }
-const std::string BlockData::genCommand(int num, long long *fstart, long long *fend) const
-{
-	std::string str;
-	if (num > m_tasks_num)
-	{
-		AFERROR("BlockData::getCmd: n > tasksnum.")
-		return str;
-	}
-	if (isNumeric())
-	{
-		long long start, end;
-		bool ok = true;
-		if (fstart && fend)
-		{
-			start = *fstart;
-			end = *fend;
-		}
-		else
-			ok = genNumbers(start, end, num);
-
-		if (ok) str = fillNumbers(m_command, start, end);
-	}
-	else
-	{
-		str = af::replaceArgs(m_command, m_tasks_data[num]->getCommand());
-	}
-	return str;
-}
-
-const std::vector<std::string> BlockData::genFiles(int num, long long *fstart, long long *fend) const
-{
-	std::vector<std::string> files;
-	if (num >= m_tasks_num)
-	{
-		AFERROR("BlockData::genCmdView: n >= tasksnum.")
-		return files;
-	}
-	if (isNumeric())
-	{
-		if (m_files.size())
-		{
-			long long start, end;
-			bool ok = true;
-			if (fstart && fend)
-			{
-				start = *fstart;
-				end = *fend;
-			}
-			else
-				ok = genNumbers(start, end, num);
-
-			if (ok)
-			{
-				for (int i = 0; i < m_files.size(); i++)
-					files.push_back(af::fillNumbers(m_files[i], start, end));
-			}
-		}
-	}
-	else
-	{
-		if (m_tasks_data[num]->getFiles().empty()) return files;
-
-		if (m_files.empty()) return m_tasks_data[num]->getFiles();
-
-		for (int bf = 0; bf < m_files.size(); bf++)
-			for (int tf = 0; tf < m_tasks_data[num]->getFiles().size(); tf++)
-				files.push_back(af::replaceArgs(m_files[bf], m_tasks_data[num]->getFiles()[tf]));
-	}
-	return files;
-}
 
 TaskExec *BlockData::genTask(int num) const
 {
@@ -1096,10 +1071,8 @@ TaskExec *BlockData::genTask(int num) const
 
 			m_capacity, m_file_size_min, m_file_size_max,
 
-//			genCommand(num, &start, &end),
 			m_command,
 
-//			genFiles(num, &start, &end),
 			m_files,
 
 			start, end, m_frames_inc, frames_num,
@@ -1109,6 +1082,7 @@ TaskExec *BlockData::genTask(int num) const
 			m_job_id, m_block_num, m_flags, num);
 
 	taskExec->m_custom_data_block = m_custom_data;
+	taskExec->m_tickets = m_tickets;
 
 	if (isNotNumeric())
 	{
@@ -1168,6 +1142,20 @@ void BlockData::setStateDependent(bool depend)
 	{
 		m_state = m_state & (~AFJOB::STATE_WAITDEP_MASK);
 	}
+}
+
+const TaskData * BlockData::getTaskData(int i_num_task) const
+{
+	if (NULL == m_tasks_data)
+		return NULL;
+
+	if (i_num_task >= m_tasks_num)
+	{
+		AF_ERR << __func__ << ": i_num_task(" << i_num_task << ") >= m_tasks_num(" << m_tasks_num << ")";
+		return NULL;
+	}
+
+	return m_tasks_data[i_num_task];
 }
 
 int BlockData::calcWeight() const
@@ -1352,13 +1340,15 @@ void BlockData::v_generateInfoStream(std::ostringstream &o_str, bool full) const
 	generateInfoStreamTyped(o_str, Msg::TBlocksProperties, full);
 }
 
-void BlockData::addSolveCounts(TaskExec *i_exec)
+void BlockData::addSolveCounts(TaskExec *i_exec, Render * i_render)
 {
 	m_running_tasks_counter++;
 	m_running_capacity_counter += i_exec->getCapResult();
+
+	m_srv_info = i_render->getName();
 }
 
-void BlockData::remSolveCounts(TaskExec *i_exec)
+void BlockData::remSolveCounts(TaskExec *i_exec, Render * i_render)
 {
 	if (m_running_tasks_counter <= 0)
 		AF_ERR << "Tasks counter is zero or negative: " << m_running_tasks_counter;
@@ -1369,6 +1359,9 @@ void BlockData::remSolveCounts(TaskExec *i_exec)
 		AF_ERR << "Tasks capacity counter is zero or negative: " << m_running_capacity_counter;
 	else
 		m_running_capacity_counter -= i_exec->getCapResult();
+
+	if (m_running_tasks_counter == 0)
+		m_srv_info = i_render->getName();
 }
 
 // Functions to update tasks progress and block progress bar:
@@ -1537,4 +1530,12 @@ void BlockData::setTimeStarted(long long value, bool reset)
 void BlockData::setTimeDone(long long value)
 {
 	m_time_done = value;
+}
+
+void BlockData::editTicket(std::string & i_name, int32_t & i_count)
+{
+	if (i_count == -1)
+		m_tickets.erase(i_name);
+	else
+		m_tickets[i_name] = i_count;
 }

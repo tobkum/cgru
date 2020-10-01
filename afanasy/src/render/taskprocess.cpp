@@ -189,7 +189,9 @@ void TaskProcess::launchCommand()
 	// On windows we attach process to a job to close all spawned childs:
 	m_hjob = CreateJobObject( NULL, NULL);
 	JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = { 0 };
-	jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+	jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | 
+						JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION | 
+						JOB_OBJECT_LIMIT_BREAKAWAY_OK;
 	if( SetInformationJobObject( m_hjob, JobObjectExtendedLimitInformation, &jeli, sizeof( jeli ) ) == 0)
 		AFERROR("SetInformationJobObject failed.\n");
 	if( AssignProcessToJobObject( m_hjob, m_pinfo.hProcess) == false)
@@ -444,7 +446,6 @@ void TaskProcess::sendTaskSate()
 
 	AF_DEBUG << this;
 
-	bool   toRecieve = false;
 	char * stdout_data = NULL;
 	int    stdout_size = 0;
 	std::string log;
@@ -452,7 +453,6 @@ void TaskProcess::sendTaskSate()
 	if(( m_update_status != af::TaskExec::UPPercent ) &&
 		( m_update_status != af::TaskExec::UPWarning ))
 	{
-		toRecieve = true;
 		stdout_data = m_parser->getData( &stdout_size);
 		log = m_service->getLog();
 	}

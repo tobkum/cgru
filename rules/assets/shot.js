@@ -83,35 +83,9 @@ function shot_InitHTML( i_data)
 		el.onclick = shot_Rename;
 	}
 
-	// Set process buttons commands:
-	var path = c_PathPM_Rules2Client( g_CurPath());
-
-	cmd = c_PathPM_Server2Client('/cgru/rules/bin/shot_process');
-	if( ASSET.process )
-		cmd = c_PathPM_Server2Client( ASSET.process);
-
-	cmd = cmd + ' -s nuke -r nuke -f ' + RULES.fps;
-	if( ASSET.nuke_template )
-		cmd += ' -t ' + c_PathPM_Server2Client(ASSET.nuke_template);
-
-	if( RULES.colorspace )
-		cmd += ' -c ' + RULES.colorspace
-
-	cmd += ' ' + path;
-
-//console.log( cmd);
-	cgru_CmdExecProcess({"element":$('shot_nuke_new_btn'),"cmd":cmd});
-
-	cmd = c_PathPM_Server2Client('/cgru/rules/bin/shot_open_latest');
-	if( ASSET.open_latest )
-		cmd = c_PathPM_Server2Client( ASSET.open_latest);
-
-	cmd = cmd + ' -s nuke -e .nk -r nuke';
-
-	cmd += ' ' + path;
-//console.log( cmd);
-
-	cgru_CmdExecProcess({"element":$('shot_nuke_latest_btn'),"cmd":cmd});
+	// Create shot process buttons:
+    if (c_CanExecuteSoft())
+    	u_CreateActions(ASSET.shot_process, $('shot_process_div')); 
 
 	shot_ResultsRead( true);
 }
@@ -160,22 +134,32 @@ function shot_ResultsReceived( i_data, i_args)
 	var el = $('shot_results');
 	el.textContent = '';
 	var found = false;
-	for( var i = 0; i < i_data.length; i++)
+	for (let i = 0; i < i_data.length; i++)
 	{
-		var folders = i_data[i].folders;
-		var files   = i_data[i].files;
-		var path    = i_args.paths[i];
+		let folders = i_data[i].folders;
+		let files   = i_data[i].files;
+		let path    = i_args.paths[i];
 
-		if((( folders == null ) || ( folders.length == 0 )) &&
-			(( files  == null ) || (   files.length == 0 ))) continue;
+		if( ((folders == null) || (folders.length == 0)) &&
+			((files   == null) || (files.length   == 0))) continue;
 
 		// Last path is DAILIES,
-		// We skip it, if something already added
-		if(( i < (i_data.length - 1)) || ( shot_thumb_paths.length == 0 ))
-			shot_thumb_paths.push( path);
+		// We skip it for thumbnails, if some other path already added.
+		// As better to make thumbnail from sequences, not movies (that just converted from that sequences)
+		if ((i < (i_data.length - 1)) || (shot_thumb_paths.length == 0))
+			shot_thumb_paths.push(path);
 
-		res_filesviews.push( new FilesView({"el":el,"path":path,"walk":i_data[i],
-			"show_walk":false,"can_count":true,"masks":shot_results_masks,"count_images":true}));
+		let fva = {};
+		fva.el = el;
+		fva.path = path;
+		fva.name = c_PathBase(path);
+		fva.walk = i_data[i];
+		fva.show_walk = false;
+		fva.can_count = true;
+		fva.masks = shot_results_masks;
+		fva.count_images = true;
+
+		res_filesviews.push(new FilesView(fva));
 
 		found = true;
 	}

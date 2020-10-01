@@ -27,31 +27,57 @@ var d_params_types = {
 
 var d_params = {"general": {}, "settings": {}};
 d_params.general = {
-	project /***/: {"width": '50%'},
-	shot /******/: {"width": '50%', "lwidth": '70px'},
-	artist /****/: {"width": '50%'},
-	activity /**/: {"width": '25%', "lwidth": '70px'},
-	version /***/: {"width": '25%', "lwidth": '70px'},
-	input /*****/: {},
-	output /****/: {},
-	filename /**/: {"width": '75%'},
-	fps /*******/: {"label": 'FPS', "width": '25%', "lwidth": '70px'}
+	project  : {"width": '50%'},
+	shot     : {"width": '50%', "lwidth": '70px'},
+	artist   : {"width": '50%'},
+	activity : {"width": '25%', "lwidth": '70px'},
+	version  : {"width": '25%', "lwidth": '70px'},
+	input    : {},
+	output   : {},
+	filename : {"width": '75%'},
+	fps      : {"label": 'FPS', "width": '25%', "lwidth": '70px'},
+	comments : {}
 };
 d_params.settings = {
-	audio_file /******/: {"label": 'Audio', "default": "REF/sound.flac", "tooltip": 'Sound file'},
-	af_depend_mask /**/: {"label": 'Depends', "tooltip": 'Afanasy job depend mask'},
-	af_hostsmask /****/: {'label': 'Hosts Mask'},
-	fffirst /*********/:
-		{"label": "F.F.First", "tooltip": 'First frame is "1"\nNo matter image file name number.'},
-	aspect_in /*******/: {"label": 'Aspect In'},
-	gamma /***********/: {}
+	audio_file     : {"label":'Audio', "default":"REF/sound.flac", "tooltip":'Sound file'},
+	af_depend_mask : {"label":'Depends', "tooltip":'Afanasy job depend mask'},
+	af_hostsmask   : {'label':'Hosts Mask'},
+	cacher_aspect  : {'width':'25%', 'lwidth':'160px', 'label':'Cacher Aspect',  'tooltip':'Cacher aspect (float aspect: 2.39)'},
+	cacher_opacity : {'width':'25%', 'lwidth':'160px', 'label':'Cacher Opacity', 'tooltip':'Cacher opacity (integer percentage: 100)'},
+	draw169        : {'width':'25%', 'lwidth':'160px', 'label':'Cacher 16x9',    'tooltip':'Cacher 16x9 opacity percentage.'},
+	draw235        : {'width':'25%', 'lwidth':'160px', 'label':'Cacher 2.35',    'tooltip':'Cacher 2.35 opacity percentage.'},
+	fffirst        : {"label":"F.F.First", "tooltip":'First frame is "1"\nNo matter image file name number.'},
+	aspect_in      : {"label":'Aspect In'},
+	gamma          : {}
 };
 
 function d_Make(i_path, i_outfolder)
 {
 	c_Log('Make Dailies: ' + i_path);
 
+	var out_path = c_PathDir(i_path);
+	if (ASSET && (ASSET.dailies))
+	{
+		out_path = ASSET.path + '/' + ASSET.dailies.path[0];
+
+		if (ASSET.dailies.folders)
+		{
+			for (let f in ASSET.dailies.folders)
+			{
+				if (i_path.toLowerCase().indexOf(f.toLowerCase()) !== -1)
+				{
+					out_path = ASSET.path + '/' + ASSET.dailies.folders[f];
+					break;
+				}
+			}
+		}
+	}
+
 	var params = {};
+
+	params.fps = RULES.fps;
+	if (RULES.dailies.fps)
+		params.fps = RULES.dailies.fps;
 
 	params.project = 'project';
 	if (ASSETS.project)
@@ -67,7 +93,7 @@ function d_Make(i_path, i_outfolder)
 		params.version = match[match.length - 1].substr(1);
 
 	params.input = i_path;
-	params.output = c_PathPM_Rules2Client(i_outfolder);
+	params.output = c_PathPM_Rules2Client(out_path);
 	params.activity = RULES.dailies.activity;
 
 	d_params.general.artist = {"width": '50%'};
@@ -112,10 +138,12 @@ function d_Make(i_path, i_outfolder)
 
 	var wnd = new cgru_Window({"name": 'dailies', "title": 'Make Dailies'});
 
-	n_WalkDir({
-		"paths": [i_path],
-		"wfunc": d_DailiesWalkReceived,
+	var cmd = 'rules/bin/walk.sh -m "' + RULES.root + i_path + '"';
+	n_Request({
+		"send": {"cmdexec": {"cmds": [cmd]}},
+		"func": d_DailiesWalkReceived,
 		"info": 'walk dailies',
+		"wpath": i_path,
 		"d_params": params,
 		"d_wnd": wnd
 	});
@@ -123,28 +151,48 @@ function d_Make(i_path, i_outfolder)
 
 function d_DailiesWalkReceived(i_data, i_args)
 {
+	//console.log(JSON.stringify(i_data));
 	var wnd = i_args.d_wnd;
 	var params = i_args.d_params;
-	var walk = i_data[0];
 
-	if (walk && walk.files && walk.files.length)
-		for (var f = 0; f < walk.files.length; f++)
+	var data = null;
+	if (i_data.cmdexec && i_data.cmdexec[0].walk)
+		data = i_data.cmdexec[0].walk;
+
+	params.comments = '';
+	if (RULES.status && RULES.status.annotation && RULES.status.annotation.length)
+		params.comments = RULES.status.annotation.trim();
+
+	//console.log(JSON.stringify(data));
+	// Get files sequence pattern and comments:
+	if (data && data.walk && data.walk.exif)
+	{
+		var exif = data.walk.exif;
+
+		// Get files pattern (from one file):
+		var file = exif.file;
+		var match = file.match(/\d+\./g);
+		if (match)
 		{
-			var file = walk.files[f].name;
-			var match = file.match(/\d+\./g);
-			if (match)
-			{
-				match = match[match.length - 1];
-				var pos = file.lastIndexOf(match);
-				var pattern = file.substr(0, pos);
-				for (var d = 0; d < match.length - 1; d++)
-					pattern += '#';
-				pattern += file.substr(pos - 1 + match.length);
-				params.input = c_PathPM_Rules2Client(params.input + '/' + pattern);
-				break;
-			}
-			// window.console.log( match);
+			match = match[match.length - 1];
+			var pos = file.lastIndexOf(match);
+			var pattern = file.substr(0, pos);
+			for (var d = 0; d < match.length - 1; d++)
+				pattern += '#';
+			pattern += file.substr(pos - 1 + match.length);
+			params.input = c_PathPM_Rules2Client(params.input + '/' + pattern);
 		}
+
+		// Get comments (came from image EXIF metadata):
+		if (exif.comments)
+			params.comments += ' ' + exif.comments.trim();
+	}
+
+	params.comments = params.comments.trim();
+
+	// Update filesviews
+	if (data)
+		fv_UpdateFromWalk(data, i_args.wpath);
 
 	wnd.elTabs =
 		gui_CreateTabs({"tabs": d_params_types, "elParent": wnd.elContent, "name": 'd_params_types'});
@@ -188,6 +236,22 @@ function d_DailiesWalkReceived(i_data, i_args)
 		"keys": RULES.dailies.containers
 	});
 
+	gui_CreateChoices({
+		"wnd": wnd.elTabs.settings,
+		"name": 'slate',
+		"value": RULES.dailies.slate,
+		"label": 'Slate:',
+		"keys": RULES.dailies.slates
+	});
+
+	gui_CreateChoices({
+		"wnd": wnd.elTabs.settings,
+		"name": 'template',
+		"value": RULES.dailies.template,
+		"label": 'Template:',
+		"keys": RULES.dailies.templates
+	});
+
 	var elBtns = document.createElement('div');
 	wnd.elContent.appendChild(elBtns);
 	elBtns.style.clear = 'both';
@@ -227,6 +291,8 @@ function d_ProcessGUI(i_wnd)
 
 	for (var key in i_wnd.elTabs.general.m_choises)
 		params[key] = i_wnd.elTabs.general.m_choises[key].value;
+	for (var key in i_wnd.elTabs.settings.m_choises)
+		params[key] = i_wnd.elTabs.settings.m_choises[key].value;
 
 	i_wnd.destroy();
 
@@ -262,11 +328,15 @@ function d_ProcessGUI(i_wnd)
 	task.command = d_MakeCmd(params);
 	block.tasks = [task];
 
-	// console.log( task.command);
-	// console.log( JSON.stringify(job));
+	//console.log(task.command);
+	//console.log(JSON.stringify(job));
+	//return;
 	n_SendJob(job);
 
-	nw_MakeNews({"title": 'dailies'});
+	let news_path = g_CurPath();
+	if (ASSET && ASSET.dailies && ASSET.dailies.paths)
+		news_path = ASSET.path;
+	nw_MakeNews({'title':'dailies','path':news_path});
 }
 
 function d_MakeCmd(i_params)
@@ -286,8 +356,15 @@ function d_MakeCmd(i_params)
 	cmd += ' -c "' + params.codec + '"';
 	cmd += ' -f ' + params.fps;
 	cmd += ' -r ' + params.format;
-	cmd += ' -s ' + params.slate;
+
+	if (params.slate && params.slate.length && params.slate != "noslate")
+		cmd += ' -s ' + params.slate;
+
 	cmd += ' -t ' + params.template;
+
+	params.comments = params.comments.trim();
+	if (params.comments != '')
+		cmd += ' --comments "' + params.comments + '"';
 
 	if (RULES.dailies.font)
 		cmd += ' --font "' + RULES.dailies.font + '"';
@@ -329,17 +406,19 @@ function d_MakeCmd(i_params)
 	if ((params.aspect_in != null) && (params.aspect_in != ''))
 		cmd += ' --aspect_in ' + params.aspect_in;
 
+	if ((params.cacher_aspect != null) && (params.cacher_aspect != ''))
+		cmd += ' --cacher_aspect ' + params.cacher_aspect;
+	if ((params.cacher_opacity != null) && (params.cacher_opacity != ''))
+		cmd += ' --cacher_opacity ' + params.cacher_opacity;
+	if ((params.draw169 != null) && (params.draw169 != ''))
+		cmd += ' --draw169 ' + params.draw169;
+	if ((params.draw235 != null) && (params.draw235 != ''))
+		cmd += ' --draw235 ' + params.draw235;
+
 	cmd += ' --createoutdir';
 
 	cmd += ' "' + input + '"';
 	cmd += ' "' + output + '"';
-
-	// python "/cgru/utilities/moviemaker/makemovie.py" -c \
-	//  "/cgru/utilities/moviemaker/codecs/photojpg_best.ffmpeg" -f 25 -n mov --fs 1 --fe 20 -r 720x576x1.09 -g \
-	//  1.00 -s "dailies_slate" -t "dailies_withlogo" --project "ENCODE" --shot "preview" --ver "preview" \
-	//  --artist "Timurhai" --activity "comp" --tmpformat tga --lgspath "logo.png" --lgssize 25 --lgsgrav \
-	//  SouthEast --lgfpath "logo.png" --lgfsize 10 --lgfgrav North \
-	//  "/data/tools/encode/preview/preview.####.jpg" "/data/tools/encode/preview_preview_121226"
 
 	return cmd;
 }
@@ -354,16 +433,16 @@ var d_cvtguiparams = {
 	fps /**********/: {"label": 'FPS', "width": '20%'},
 	time_start /***/: {"default": '00:00:00', "width": '20%'},
 	duration /*****/: {"default": '00:00:00', "width": '20%'},
-	quality /******/: {"label": 'JPEG Quality', 'type': 'int', "default": 100, 'width': '20%'},
+	quality /******/: {"label": 'JPEG Quality', 'type': 'int', "default": 100, 'width': '20%',"lwidth":'160px'},
 	ipar /*********/: {"label": 'Input pixel aspect', "width": '20%',"lwidth":'160px'},
-	padding /******/: {"label": 'Padding', 'width': '20%'},
-	af_capacity /**/: {'label': 'Capacity', 'width': '20%', 'type': 'int'},
-	af_maxtasks /***/: {'label': 'Max Tasks', 'width': '20%', 'type': 'int', 'default': -1},
-	af_perhost /****/: {'label': 'Per Host', 'width': '20%', 'type': 'int', 'default': 1},
+	padding /******/: {"label": 'Padding', 'width': '20%', "default": 4},
+	first_frame /**/: {"label": 'First Frame', 'width': '20%'},
+	af_capacity /**/: {'label': 'Capacity', 'width': '15%', 'type': 'int'},
+	af_maxtasks /***/: {'label': 'Max Tasks', 'width': '15%', 'type': 'int', 'default': -1},
+	af_perhost /****/: {'label': 'Per Host', 'width': '15%', 'type': 'int', 'default': 1},
 	af_fpt /********/: {
-		'label': 'Frames Per Task',
-		'width': '20%',
-		'lwidth': '160px',
+		'label': 'FPT',
+		'width': '15%',
 		'type': 'int',
 		'default': 10,
 		'tooltip': 'Frames Per Task'
@@ -384,6 +463,9 @@ var d_cvtmulti_params = {
 function d_Convert(i_args)
 {
 	var params = {};
+	params.fps = RULES.fps;
+	if (RULES.dailies.fps)
+		params.fps = RULES.dailies.fps;
 
 	var title = 'Convert ';
 	if (i_args.images)
@@ -411,12 +493,12 @@ function d_Convert(i_args)
 	gui_CreateChoices({
 		"wnd": wnd.elContent,
 		"name": 'format',
-		"value": 'asis',
+		"value": '1280x720',
 		"label": 'Formats:',
 		"keys": RULES.dailies.formats
 	});
 
-	gui_Create(wnd.elContent, d_cvtguiparams, [params, RULES.dailies]);
+	gui_Create(wnd.elContent, d_cvtguiparams, [params, RULES, RULES.dailies]);
 
 	gui_CreateChoices(
 		{"wnd": wnd.elContent, "name": 'imgtype', "value": 'jpg', "label": 'Image Type:', "keys": img_types});
@@ -613,6 +695,8 @@ function d_CvtImages(i_wnd, i_params)
 	cmd += ' -q ' + i_params.quality;
 	if (i_params.padding)
 		cmd += ' --renumpad ' + i_params.padding;
+	if (i_params.first_frame)
+		cmd += ' --renumfirst ' + i_params.first_frame;
 	if (i_params.format && (i_params.format != 'asis'))
 		cmd += ' -r ' + i_params.format;
 
@@ -769,6 +853,9 @@ function d_CvtMovies(i_wnd, i_params, i_to_sequence)
 
 		if (i_params.padding)
 			cmd += ' -p ' + i_params.padding;
+
+		if (i_params.first_frame)
+			cmd += ' --first ' + i_params.first_frame;
 	}
 	else
 	{
@@ -975,6 +1062,9 @@ function d_MakeCut(i_args)
 	params.cut_name = i_args.cut_name;
 	params.output = c_PathPM_Rules2Client(i_args.output);
 	params.input = RULES.assets.shot.result.path.join(',');
+	params.fps = RULES.fps;
+	if (RULES.dailies.fps)
+		params.fps = RULES.dailies.fps;
 	if (RULES.cut.input)
 		params.input = RULES.cut.input;
 

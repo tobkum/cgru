@@ -42,7 +42,7 @@ public:
 protected:
 	void contextMenuEvent(QContextMenuEvent *event);
 
-	void doubleClicked( Item * item);
+	void v_doubleClicked(Item * i_item);
 
 	void v_connectionLost();
 
@@ -56,13 +56,18 @@ private slots:
 	void actBlockService();
 	void actBlockParser();
 
-	void blockAction( int id_block, QString i_action);
+	// Block number will be ignored here. Selected blocks will be processed.
+	void slot_BlockAction(int i_bnum, QString i_json);
+
 	void actBlockPreview( int num_cmd, int num_img);
 
 	void actTaskOpen();
-	void actTaskPreview( int num_cmd, int num_img);
+	void actTaskPreview(int i_num_cmd, int i_num_img);
 	void actTasksRestart();
 	void actTasksSkip();
+	void actTasksDone();
+	void actTaskTryNext();
+	void actTaskDoNotTry();
 
 	void actBrowseFolder();
 
@@ -92,7 +97,8 @@ private:
 
 	int getRow( int block, int task = -1);
 
-	void blockAction( int id_block, const QString & i_action, bool i_query);
-	void tasksOperation( const std::string & i_type);
+	void blockAction(const QString & i_json);
+
+	void tasksOperation(const std::string & i_type, const std::string & i_mode = std::string());
 	void setWindowTitleProgress();
 };

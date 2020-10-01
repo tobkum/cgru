@@ -106,6 +106,9 @@ void TaskExec::jsonWrite( std::ostringstream & o_str, int i_type) const
 	o_str << ",\"block_num\":" << m_block_num;
 	o_str << ",\"task_num\":"  << m_task_num;
 
+	if (m_tickets.size())
+		jw_intmap("tickets", m_tickets, o_str);
+
 	if( m_number > 0 )
 		o_str << ",\"number\":" << m_number;
 
@@ -208,6 +211,8 @@ void TaskExec::v_readwrite( Msg * msg)
 		rw_int32_t ( m_job_id,            msg);
 		rw_int32_t ( m_block_num,         msg);
 		rw_int32_t ( m_task_num,          msg);
+
+		rw_IntMap(m_tickets, msg);
 
 	break;
 

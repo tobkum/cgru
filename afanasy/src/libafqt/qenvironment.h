@@ -2,7 +2,6 @@
 
 #include "name_afqt.h"
 #include "attr.h"
-#include "attrnumber.h"
 #include "attrcolor.h"
 
 #include <QtGui/QColor>
@@ -34,6 +33,8 @@ public:
 
 	static bool getRect( const QString & i_name, QRect & rect);
 	static void setRect( const QString & i_name, const QRect & rect);
+
+	static QMap<QString, AttrNumber> ms_attrs_panel;
 
 	static AttrNumber level;
 
@@ -101,11 +102,14 @@ public:
 	static AttrColor clr_taskwarningrun;
 	static AttrColor clr_taskskipped;
 	static AttrColor clr_taskwaitreconn;
+	static AttrColor clr_tasktrynext;
 	static AttrColor clr_itemrender;
 	static AttrColor clr_itemrenderoff;
 	static AttrColor clr_itemrenderbusy;
 	static AttrColor clr_itemrendernimby;
+	static AttrColor clr_itemrenderNIMBY;
 	static AttrColor clr_itemrenderpaused;
+	static AttrColor clr_itemrendersick;
 	static AttrColor clr_itemrenderpltclr;
 	static AttrColor clr_error;
 	static AttrColor clr_errorready;
@@ -132,6 +136,7 @@ public:
 
 	static QFont f_name;
 	static QFont f_info;
+	static QFont f_muted;
 	static QFont f_plotter;
 	static QFont f_min;
 
@@ -146,6 +151,8 @@ public:
 	inline static const QHostAddress & getAfServerQHostAddress()  { return ms_qafserveraddress;}
 
 	static const QStringList getThemes();
+
+	static const QString & getDateTimeFormat();
 
 	static bool loadTheme( const QString & i_theme);
 

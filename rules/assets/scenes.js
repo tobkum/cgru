@@ -44,19 +44,35 @@ function sc_InitHTML( i_data)
 
 	if( sc_scenes )
 	{
-		scenes_Show();
+		$('scenes_load_btn').textContent = 'Load All Shots';
+		$('scenes_load_btn').onclick = function()
+		{
+			sc_Show_Loaded();
+			scenes_Show();
+		}
 	}
 	else
 	{
-		scene_Show();
+		$('scenes_load_btn').textContent = 'Load Scene Shots';
+		$('scenes_load_btn').onclick = function()
+		{
+			sc_Show_Loaded();
+			scene_Show();
+		}
 	}
+}
+
+function sc_Show_Loaded()
+{
+	$('scenes_load_btn').style.display = 'none';
+	$('scenes_show_loaded').style.display = 'block';
 }
 
 function sc_Post()
 {
 	if( g_arguments )
 		if( g_arguments.s_Search )
-			sc_FilterShots( g_arguments.s_Search);
+			s_Found(sc_FilterShots( g_arguments.s_Search));
 }
 
 function scene_Show()
@@ -131,6 +147,7 @@ function scene_Show()
 		}
 
 		elShot.m_elBody = document.createElement('div');
+		elShot.m_elBody.onclick = function(i_e){i_e.stopPropagation();}
 		elDiv.appendChild( elShot.m_elBody);
 		elShot.m_elBody.classList.add('body');
 		elShot.m_elBody.m_elShot = elShot;
@@ -234,6 +251,13 @@ function sc_BodyReceived( i_data, i_args)
 	// Replace <br> with spaces through some pattern:
 	i_args.elShot.m_elBody.innerHTML = i_data.replace(/\<\s*br\s*\/?\s*\>/g,'@@BR@@');
 	i_args.elShot.m_elBody.innerHTML = i_args.elShot.m_elBody.textContent.replace(/@@BR@@/g,' ');
+
+	if (i_args.elShot.m_status && i_args.elShot.m_status.obj)
+	{
+		if (i_args.elShot.m_status.obj.body == null)
+			i_args.elShot.m_status.obj.body = {};
+		i_args.elShot.m_status.obj.body.data = i_data;
+	}
 }
 
 function scenes_Show()
@@ -278,7 +302,6 @@ function scenes_Received( i_data, i_args)
 		var elStatus = document.createElement('div');
 		elScene.appendChild( elStatus);
 		elStatus.classList.add('status');
-//window.console.log(JSON.stringify(fobj));
 		st_SetElLabel( fobj.status, elStatus);
 		st_SetElColor( fobj.status, elScene);
 
@@ -602,51 +625,62 @@ function scenes_GetSelectedShots()
 	return shots;
 }
 
-function sc_FilterShots( i_args)
+function sc_FilterShots(i_args)
 {
-	if( sc_elShots == null ) return;
+	var o_res = {};
+	o_res.found = {};
+	o_res.found.artists = [];
+	o_res.found.flags = [];
+	o_res.found.tags = [];
 
-//console.log( JSON.stringify(i_args));
-//	if( i_args == null ) i_args = {};
-	if( i_args == null )
-	{
-		sc_ShowAllShots();
+	if (sc_elShots == null)
 		return;
-	}
+
+	if (i_args == null)
+		i_args = {};
 
 	var anns = null;
-	if( i_args.ann )
+	if (i_args.ann )
 	{
-		var anns_or = i_args.ann.split(',');
+		let anns_or = i_args.ann.split('|');
 		anns = [];
-		for( var o = 0; o < anns_or.length; o++)
-			anns.push( anns_or[o].split(' '));
+		for (let o = 0; o < anns_or.length; o++)
+			anns.push( anns_or[o].split('+'));
 	}
 
-	for( var th = 0; th < sc_elShots.length; th++)
+	var bodies = null;
+	if (i_args.body)
 	{
-		var found = ( i_args == null );
+		let bodies_or = i_args.body.split('|');
+		bodies = [];
+		for (let o = 0; o < bodies_or.length; o++)
+			bodies.push(bodies_or[o].split('+'));
+	}
 
-		var el = sc_elShots[th];
-		var st_obj = {};
-		if( el.m_status && el.m_status.obj )
+	for (let th = 0; th < sc_elShots.length; th++)
+	{
+		let found = (i_args == null);
+
+		let el = sc_elShots[th];
+		let st_obj = {};
+		if (el.m_status && el.m_status.obj)
 			st_obj = el.m_status.obj;
 
-		if( anns )
+		if (anns)
 		{
-			if( st_obj.annotation )
-				for( var o = 0; o < anns.length; o++)
+			if (st_obj.annotation)
+				for (let o = 0; o < anns.length; o++)
 				{
-					var found_and = true;
-					for( var a = 0; a < anns[o].length; a++)
+					let found_and = true;
+					for (let a = 0; a < anns[o].length; a++)
 					{
-						if( st_obj.annotation.indexOf( anns[o][a]) == -1 )
+						if (st_obj.annotation.toLowerCase().indexOf(anns[o][a].toLowerCase()) == -1)
 						{
 							found_and = false;
 							break;
 						}
 					}
-					if( found_and )
+					if (found_and)
 					{
 						found = true;
 						break;
@@ -655,70 +689,138 @@ function sc_FilterShots( i_args)
 		}
 		else found = true;
 
-		if( i_args.flags && found )
+		if (bodies && found)
 		{
 			found = false;
-			if( st_obj.flags && st_obj.flags.length )
+			if (st_obj.body && st_obj.body.data)
+				for (let o = 0; o < bodies.length; o++)
+				{
+					let found_and = true;
+					for (let b = 0; b < bodies[o].length; b++)
+					{
+						if (st_obj.body.data.toLowerCase().indexOf(bodies[o][b].toLowerCase()) == -1)
+						{
+							found_and = false;
+							break;
+						}
+					}
+					if (found_and)
+					{
+						found = true;
+						break;
+					}
+				}
+		}
+
+		if (i_args.flags && found)
+		{
+			found = false;
+			if (st_obj.flags && st_obj.flags.length)
 			{
-				for( i = 0; i < i_args.flags.length; i++ )
-					if( st_obj.flags.indexOf( i_args.flags[i]) != -1 )
-						{ found = true; break; }
+				let flags_and = i_args.flags.includes('_AND_');
+				for (let f of i_args.flags)
+				{
+					// skip special flags
+					if (f.charAt(0) == '_') continue;
+
+					if (st_obj.flags.includes(f))
+					{
+						found = true;
+						if (false == flags_and)
+							break;
+					}
+					else
+					{
+						found = false;
+						if (flags_and)
+							break;
+					}
+				}
 			}
-			else if( i_args.flags.indexOf('_null_') != -1)
+			else if (i_args.flags.indexOf('_null_') != -1)
 				found = true;
 		}
 
-		if( i_args.tags && found )
+		if (i_args.tags && found)
 		{
 			found = false;
-			if( st_obj.tags && st_obj.tags.length )
+			if (st_obj.tags && st_obj.tags.length)
 			{
-				for( i = 0; i < i_args.tags.length; i++ )
-					if( st_obj.tags.indexOf( i_args.tags[i]) != -1 )
-						{ found = true; break; }
+				let tags_and = i_args.tags.includes('_AND_');
+				for (let t of i_args.tags)
+				{
+					// skip special tags
+					if (t.charAt(0) == '_') continue;
+
+					if (st_obj.tags.includes(t))
+					{
+						found = true;
+						if (false == tags_and)
+							break;
+					}
+					else
+					{
+						found = false;
+						if (tags_and)
+							break;
+					}
+				}
 			}
-			else if( i_args.tags.indexOf('_null_') != -1)
+			else if (i_args.tags.indexOf('_null_') != -1)
 				found = true;
 		}
 
-		if( i_args.artists && found )
+		if (i_args.artists && found)
 		{
 			found = false;
-			if( st_obj.artists && st_obj.artists.length )
+			if (st_obj.artists && st_obj.artists.length)
 			{
-				for( i = 0; i < i_args.artists.length; i++ )
-					if( st_obj.artists.indexOf( i_args.artists[i]) != -1 )
+				for (let i = 0; i < i_args.artists.length; i++)
+					if (st_obj.artists.indexOf(i_args.artists[i]) != -1)
 						{ found = true; break; }
 			}
-			else if( i_args.artists.indexOf('_null_') != -1)
+			else if (i_args.artists.indexOf('_null_') != -1)
 				found = true;
 		}
 
 		if( i_args.percent && found )
 		{
 			found = false;
-			if(( st_obj.progress != null ) &&
-				(( i_args.percent[0] == null ) || ( st_obj.progress >= i_args.percent[0] )) &&
-				(( i_args.percent[1] == null ) || ( st_obj.progress <= i_args.percent[1] )))
+			if ((st_obj.progress != null) &&
+				((i_args.percent[0] == null) || (st_obj.progress >= i_args.percent[0])) &&
+				((i_args.percent[1] == null) || (st_obj.progress <= i_args.percent[1])))
 				found = true;
 		}
 
-		if( i_args.finish && found )
+		if (i_args.finish && found)
 		{
 			found = false;
-			if( st_obj.finish )
+			if (st_obj.finish)
 			{
-				var days = c_DT_DaysLeft( st_obj.finish);
-				if( (( i_args.finish[0] == null ) ||  days >= i_args.finish[0] ) &&
-					(( i_args.finish[1] == null ) ||  days <= i_args.finish[1] ))
+				let days = c_DT_DaysLeft(st_obj.finish);
+				if (((i_args.finish[0] == null) ||  days >= i_args.finish[0]) &&
+					((i_args.finish[1] == null) ||  days <= i_args.finish[1]))
 					found = true;
 			}
 		}
 
-		if( found )
+		if (found)
 		{
 			el.style.display = 'block';
 			el.m_filtered = false;
+
+			if (st_obj.artists)
+				for (let a = 0; a < st_obj.artists.length; a++)
+					o_res.found.artists.push(st_obj.artists[a]);
+
+			if (st_obj.flags)
+				for (let f = 0; f < st_obj.flags.length; f++)
+					o_res.found.flags.push(st_obj.flags[f]);
+
+			if (st_obj.tags)
+				for (let t = 0; t < st_obj.tags.length; t++)
+					o_res.found.tags.push(st_obj.tags[t]);
+
 		}
 		else
 		{
@@ -727,19 +829,20 @@ function sc_FilterShots( i_args)
 		}
 	}
 
-	if( sc_elScenes )
-		for( var f = 0; f < sc_elScenes.length; f++)
+	// Hide scenes where are no shots to show
+	if (sc_elScenes)
+		for (let f = 0; f < sc_elScenes.length; f++)
 		{
-			var oneShown = false;
-			for( var t = 0; t < sc_elScenes[f].m_elThumbnails.length; t++)
+			let oneShown = false;
+			for (var t = 0; t < sc_elScenes[f].m_elThumbnails.length; t++)
 			{
-				if( sc_elScenes[f].m_elThumbnails[t].m_filtered != true )
+				if (sc_elScenes[f].m_elThumbnails[t].m_filtered != true)
 				{
 					oneShown = true;
 					break;
 				}
 			}
-			if( oneShown )
+			if (oneShown)
 			{
 				sc_elScenes[f].style.display = 'block';
 				sc_elScenes[f].m_filtered = false;
@@ -752,6 +855,8 @@ function sc_FilterShots( i_args)
 		}
 
 	sc_DisplayStatistics();
+
+	return o_res;
 }
 
 function sc_ShowAllShots()
@@ -937,7 +1042,6 @@ function scenes_makeThumbnail( i_data, i_args)
 	cmd += ' -c ' + sc_thumb_params_values.colorspace;
 
 	c_Info('Generating thumbnail for ' + el.m_path + ' (' + num_updated + '/' + sc_elImgThumbs.length + ')');
-//console.log(cmd);
 
 	n_Request({"send":{"cmdexec":{"cmds":[cmd]}},"func":scenes_makeThumbnail,"elThumb":el,"info":'shot thumbnail',"local":true,"wait":false,"parse":true});
 }

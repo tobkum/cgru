@@ -2,30 +2,18 @@
 
 #include "../libafanasy/job.h"
 
-#include "itemnode.h"
+#include "itemwork.h"
 #include "blockinfo.h"
 
 class ListJobs;
 
-class ItemJob : public ItemNode
+class ItemJob : public ItemWork
 {
 public:
-	ItemJob( ListJobs * i_list, af::Job *job, bool i_subscibed, const CtrlSortFilter * i_ctrl_sf);
+	ItemJob(ListNodes * i_listnodes, bool i_inworklist, af::Job *job, const CtrlSortFilter * i_ctrl_sf, bool i_notify);
 	~ItemJob();
 
-	void updateValues( af::Node *node, int type);
-
-	inline int getErrorRetries(         int block = 0 ) const
-		{if(block<m_blocks_num )return m_blockinfo[ block].getErrorsRetries();       else return 0; }
-	inline int getErrorsAvoidHost(      int block = 0 ) const
-		{if(block<m_blocks_num )return m_blockinfo[ block].getErrorsAvoidHost();     else return 0; }
-	inline int getErrorsTaskSameHost(   int block = 0 ) const
-		{if(block<m_blocks_num )return m_blockinfo[ block].getErrorsTaskSameHost();  else return 0; }
-
-	inline uint32_t getTaskMaxRunTime(int block = 0) const
-		{if(block<m_blocks_num )return m_blockinfo[block].getTaskMaxRunTime(); else return 0; }
-	inline uint32_t getTaskMinRunTime(int block = 0) const
-		{if(block<m_blocks_num )return m_blockinfo[block].getTaskMinRunTime(); else return 0; }
+	void v_updateValues(af::Node * i_afnode, int i_msgType);
 
 	int maxrunningtasks;
 	int maxruntasksperhost;
@@ -42,9 +30,13 @@ public:
 	bool ignorenimby;
 	bool ignorepaused;
 
+	bool has_tasks_trying_next;
+
+	QString pools;
 	QString service;
 	QString hostname;
 	QString username;
+	QString branch;
 	QString hostsmask;
 	QString hostsmask_exclude;
 	QString dependmask;
@@ -62,18 +54,20 @@ public:
 
 	const QString getRulesFolder();
 
-	inline int getBlocksNum() const { return m_blocks_num;}
-	inline int getBlockPercent( int block ) const
-		{ if( block < m_blocks_num ) return m_blockinfo[block].p_percentage; else return 0;}
+	inline int getBlocksNum() const {return m_blocks.size();}
 
-	void setSortType(   int type1, int i_type2 );
-	void setFilterType( int type );
+	inline const BlockInfo * getBlockInfo(int i_bnum) const {
+		if (i_bnum < 0) return m_blocks[0];
+		if (i_bnum < m_blocks.size()) return m_blocks[i_bnum];
+		return NULL;}
 
-	void generateMenu( int id_block, QMenu * menu, QWidget * qwidget);
+	inline int getBlockPercent(int i_bnum) const
+		{if(i_bnum < m_blocks.size()) return m_blocks[i_bnum]->p_percentage; else return 0;}
 
-	bool blockAction( std::ostringstream & i_str, int id_block, const QString & i_action, ListItems * listitems) const;
+	void v_setSortType(   int type1, int i_type2 );
+	void v_setFilterType( int type );
 
-	inline const QString & getBlockName( int num) const { return m_blockinfo[num].getName();}
+	inline const QString & getBlockName(int i_bnum) const {return m_blocks[i_bnum]->getName();}
 
 	bool calcHeight();
 
@@ -82,7 +76,7 @@ public:
 	void getThumbnail() const;
 
 protected:
-	void paint( QPainter *painter, const QStyleOptionViewItem &option) const;
+	virtual void v_paint(QPainter * i_painter, const QRect & i_rect, const QStyleOptionViewItem & i_option) const;
 
 private:
 	static const int Height;
@@ -90,9 +84,11 @@ private:
 	static const int HeightAnnotation;
 
 private:
-	ListJobs * m_list;
+	void updateInfo(const af::Job * i_job);
 
-	int m_blocks_num;
+private:
+	bool m_inworklist;
+
 	bool compact_display;
 
 	QString properties;
@@ -111,5 +107,6 @@ private:
 	QList<QString> m_thumbs_paths;
 
 	int block_height;
-	BlockInfo * m_blockinfo;
+
+	QVector<BlockInfo*> m_blocks;
 };

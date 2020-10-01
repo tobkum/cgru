@@ -302,6 +302,7 @@ bool TaskRun::refresh( time_t currentTime, RenderContainer * renders, MonitorCon
 	int no_progress_for = currentTime - m_progress->last_percent_change;
 	if ((timeout > 0 ) && (no_progress_for > timeout))
 	{
+		m_progress->state = m_progress->state | AFJOB::STATE_ERROR_MASK;
 		m_progress->errors_count++;
 		stop("Task run time without progress reached (no progress for " + af::itos(no_progress_for) + "s).", renders, monitoring);
 		errorHostId = m_hostId;
@@ -346,7 +347,7 @@ void TaskRun::finish( const std::string & message, RenderContainer * renders, Mo
 		RenderAf * render = rendersIt.getRender( m_hostId);
 		if( render )
 		{
-			render->taskFinished( m_exec, monitoring);
+			render->taskFinished(m_exec, m_progress->state, monitoring);
 			m_block->remSolveCounts(monitoring, m_exec, render);
 		}
 
@@ -365,18 +366,17 @@ void TaskRun::finish( const std::string & message, RenderContainer * renders, Mo
    m_zombie = true;
 }
 
-void TaskRun::restart( const std::string & message, RenderContainer * renders, MonitorContainer * monitoring)
+void TaskRun::restart(const std::string & i_message, RenderContainer * i_renders, MonitorContainer * i_monitoring)
 {
-   if( m_zombie ) return;
-   stop( message+" Is running.", renders, monitoring);
+	if (m_zombie) return;
+	stop(i_message + " Is running.", i_renders, i_monitoring);
 }
 
-void TaskRun::skip( const std::string & message, RenderContainer * renders, MonitorContainer * monitoring)
+void TaskRun::skip(const std::string & i_message, RenderContainer * i_renders, MonitorContainer * i_monitoring, uint32_t i_state)
 {
-   if( m_zombie ) return;
-   m_progress->state = m_progress->state | AFJOB::STATE_SKIPPED_MASK;
-   m_progress->state = m_progress->state | AFJOB::STATE_DONE_MASK;
-   stop( message+" Is running.", renders, monitoring);
+   if (m_zombie) return;
+   m_progress->state |= i_state;
+   stop(i_message + " Is running.", i_renders, i_monitoring);
 }
 
 int TaskRun::v_getRunningRenderID( std::string & o_error) const

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import json
@@ -19,8 +18,9 @@ Parser = OptionParser(
 )
 
 Parser.add_option('-o', '--output',   dest='output',   type = 'string',     default='.rules/walk.json', help='File to save results.')
-Parser.add_option('-n', '--noupdate', dest='noupdate', action='store_true', default=False,              help='Skip update upfolders.')
+Parser.add_option('-u', '--upparents',dest='upparents',type = 'int',        default=0,                  help='Update parent folders count (-1 = infinite, up to the root).')
 Parser.add_option('-m', '--mediainfo',dest='mediainfo',action='store_true', default=False,              help='Get media information.')
+Parser.add_option('-p', '--progress', dest='progress', action='store_true', default=False,              help='Output progress percentage.')
 Parser.add_option('-t', '--thumb',    dest='thumb',    type = 'int',        default=None,               help='Make thumbnail frequency.')
 Parser.add_option('-r', '--report',   dest='report',   type = 'int',        default=None,               help='Print report frequency.')
 Parser.add_option('-V', '--verbose',  dest='verbose',  type = 'int',        default=0,                  help='Verbose mode.')
@@ -194,12 +194,18 @@ def walkdir(i_path, i_subwalk, i_curdepth=0):
             if entry[0] != '.':
                 out['num_files'] += 1
                 if cgruutils.isImageExt( path):
-                    if Options.thumb is not None:
-                        if out['num_images'] == 0:
+                    if out['num_images'] == 0:
+                        if Options.thumb is not None:
                             if ThumbFolderCount % Options.thumb == 0 and size < 10000000:
                                 print('@IMAGE!@'+path)
                                 sys.stdout.flush()
                             ThumbFolderCount += 1
+                        if Options.mediainfo:
+                            obj = mediainfo.processExif(path)
+                            if obj and 'mediainfo' in obj:
+                                out['files'][entry] = obj['mediainfo']
+                                out['exif'] = obj['mediainfo']['exif']
+                                out['exif']['file'] = os.path.basename(path)
                     out['num_images'] += 1
                 elif cgruutils.isMovieExt( path) and Options.mediainfo:
                     obj = mediainfo.processMovie( path)
@@ -212,7 +218,7 @@ def walkdir(i_path, i_subwalk, i_curdepth=0):
             TotalSpace += space
 
     # Just output progress:
-    if PrevFiles:
+    if Options.progress and PrevFiles:
         cur_progress = int(100.0 * CurFiles / PrevFiles)
         if cur_progress != Progress:
             Progress = cur_progress
@@ -271,9 +277,10 @@ if PrevFiles:
 
 
 # Update parent folders:
-if not Options.noupdate:
+if Options.upparents != 0:
     curpath = StartPath
     PrevFiles = None
+    depth = 0
     while curpath != '/' and curpath != '':
         # Go one folder upper:
         uppath = os.path.dirname(curpath)
@@ -283,6 +290,10 @@ if not Options.noupdate:
 
         outInfo('updating', curpath)
         walkdir(curpath, False)
+
+        depth += 1
+        if Options.upparents > 0 and depth >= Options.upparents:
+            break
 
 
 # Output statistics:

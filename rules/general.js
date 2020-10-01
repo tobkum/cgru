@@ -27,12 +27,13 @@ var g_elCurFolder = null;
 var g_elFolders = {};
 
 var g_nav_clicked = false;
+var g_navigating_path = null;
 var g_arguments = null;
 
 var g_navig_infos = {
-	all /******/: ['annotation', 'size', 'artists', 'tags', 'duration', 'price', 'frames', 'percent'],
-	default /**/: ['annotation', 'artists', 'percent'],
-	current /**/: []
+	all     : ['annotation', 'size', 'flags', 'artists', 'tags', 'duration', 'price', 'frames', 'percent'],
+	default : ['annotation', 'flags', 'tags', 'artists', 'percent'],
+	current : []
 };
 
 function cgru_params_OnChange(i_param, i_value)
@@ -63,8 +64,12 @@ function g_Init_Server(i_data)
 	if (SERVER.version)
 		$('version').innerHTML = c_Strip(SERVER.version);
 
+	if (SERVER.upload_max_filesize)
+		RULES_TOP.upload_max_filesize = SERVER.upload_max_filesize;
+
 	var url = decodeURI(document.location.href);
 
+	n_log_responses = false;
 	n_Request({"send": {"initialize": {'url': url}}, "func": g_Init_Config, "info": 'init'});
 }
 
@@ -114,8 +119,10 @@ function g_Init_Rules(i_data)
 
 	RULES = RULES_TOP;
 	p_Init();
+	u_InitConfigured();
 	nw_InitConfigured();
 	bm_InitConfigured();
+	up_InitConfigured();
 
 	$('afanasy_webgui').href = 'http://' + cgru_Config.af_servername + ':' + cgru_Config.af_serverport;
 	$('rules_label').textContent = RULES_TOP.company + '-RULES';
@@ -156,8 +163,21 @@ function g_CurPathDummy()
 
 function g_OnKeyDown(e)
 {
-	if (e.keyCode == 27)
-		cgru_EscapePopus();  // ESC
+	if (e.keyCode == 27)  // ESC
+	{
+		// Close all cgru popups
+		cgru_EscapePopus();
+
+		// Close comments images processing
+		if (ec_process_image && (ec_process_image.uploading != true))
+			ec_ProcessImageClose();
+	}
+	else if (e.keyCode == 13) // ENTER
+	{
+		// Close comments images processing
+		if (ec_process_image && (ec_process_image.uploading != true))
+			ec_ProcessImageUpload();
+	}
 }
 
 function g_GO(i_path)
@@ -250,6 +270,7 @@ function g_NavigatePost()
 		$('navigate_prev').href = '#' + g_elCurFolder.m_path;
 
 	g_POST('navig');
+	g_navigating_path = null;
 }
 
 function g_POST(i_msg)
@@ -285,7 +306,15 @@ function g_PostLaunchFunc(i_msg)
 
 function g_Navigate(i_path)
 {
+	if (g_navigating_path != null)
+	{
+		c_Error('Already navigating to ' + g_navigating_path);
+		return;
+	}
+
+	g_navigating_path = i_path;
 	g_WaitingSet();
+
 	if (g_elCurFolder)
 		g_elCurFolder.classList.remove('current');
 	g_elCurFolder = u_el.navig;
@@ -296,7 +325,7 @@ function g_Navigate(i_path)
 
 	RULES = c_CloneObj(RULES_TOP);
 
-	c_Log('Navigating to: ' + i_path);
+	c_Info('Navigating to: ' + i_path);
 
 	var folders = i_path.split('/');
 	// window.console.log( folders);
@@ -552,7 +581,7 @@ function g_AppendFolder(i_elParent, i_fobject)
 	var elName = document.createElement('a');
 	elFBody.appendChild(elName);
 	elName.classList.add('fname');
-	elName.textContent = folder;
+	elName.innerHTML = c_HighlightBadChars(folder);
 
 	var elPercent = document.createElement('div');
 	elFBody.appendChild(elPercent);
@@ -601,6 +630,12 @@ function g_AppendFolder(i_elParent, i_fobject)
 	elFolder.m_elArtists = elArtists;
 	elArtists.classList.add('artists');
 	elArtists.classList.add('info');
+
+	var elFlags = document.createElement('div');
+	elFBody.appendChild(elFlags);
+	elFolder.m_elFlags = elFlags;
+	elFlags.classList.add('flags');
+	elFlags.classList.add('info');
 
 	elFolder.m_elProgress = document.createElement('div');
 	elFBody.appendChild(elFolder.m_elProgress);
@@ -740,15 +775,13 @@ function g_FolderSetStatusPath(i_status, i_path, i_up_params)
 
 function g_FolderSetStatus(i_status, i_elFolder, i_up_params)
 {
-	// console.log('GFS:'+JSON.stringify(i_status));
-	// return;
 	if (i_elFolder == null)
 		i_elFolder = g_elCurFolder;
 	if (i_elFolder.m_fobject.status == null)
 		i_elFolder.m_fobject.status = {};
 
 	if (i_up_params)
-		for (var parm in i_up_params)
+		for (let parm in i_up_params)
 			i_elFolder.m_fobject.status[parm] = i_status[parm];
 	else
 		i_elFolder.m_fobject.status = i_status;
@@ -765,6 +798,8 @@ function g_FolderSetStatus(i_status, i_elFolder, i_up_params)
 		st_SetElPrice(i_status, i_elFolder.m_elPrice);
 	if ((i_up_params == null) || i_up_params.tags)
 		st_SetElTags(i_status, i_elFolder.m_elTags, true);
+	if ((i_up_params == null) || i_up_params.flags)
+		st_SetElFlags(i_status, i_elFolder.m_elFlags, true);
 
 	if (i_elFolder.m_fobject.auxiliary)
 	{
@@ -832,22 +867,13 @@ function g_CloseFolder(i_elFolder)
 	i_elFolder.classList.remove('opened');
 }
 
-// g_clicked_folder = null;
 function g_FolderOnClick(i_evt, i_double)
 {
-	// if( i_double !== true ) window.console.log('Clicked');
-
 	i_evt.stopPropagation();
 	var elFolder = i_evt.currentTarget;
 	if (elFolder.classList.contains('dummy'))
 		return;
-	/*	g_clicked_folder = elFolder;
-		setTimeout( g_FolderClicked, 100);
-	}
 
-	function g_FolderClicked()
-	{
-		elFolder = g_clicked_folder;*/
 	if (elFolder.classList.contains('current'))
 	{
 		if (elFolder.classList.contains('opened'))

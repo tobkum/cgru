@@ -81,6 +81,8 @@ public:
 
 	inline void appendTaskLog( const std::string & message) const { m_tasks[0]->v_appendLog( message);}
 
+	bool initSystem();
+
 private:
 	SysTask * addTask( af::TaskExec * taskexec);
 	SysTask * getTask( int tasknum, const char * errorMessage = NULL);
@@ -101,6 +103,9 @@ public:
 	static void AddPostCommand( const std::string & i_cmd, const std::string & i_wdir, const std::string & i_user_name, const std::string & i_job_name);
 	static void AddWOLCommand( const std::string & i_cmd, const std::string & i_wdir, const std::string & i_user_name, const std::string & i_job_name);
 	static void AddEventCommand( const std::string & i_cmd, const std::string & i_wdir, const std::string & i_user_name, const std::string & i_job_name, const std::string & i_task_name);
+
+	inline static const JobAf  * GetJob()  {return ms_sysjob;}
+	inline static const UserAf * GetUser() {return ms_sysjob->m_user;}
 
 	enum BlocksEnum
 	{
@@ -144,6 +149,8 @@ class SysBlockData : public af::BlockData
 public:
 	SysBlockData ( int BlockNum, int JobId);
 	virtual ~SysBlockData ();
+
+	bool initSystem();
 };
 
 /// System job task data:

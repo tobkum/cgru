@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import json
@@ -283,10 +282,22 @@ class Block:
         :param i_value:
         :return:
         """
-        if self.data not in ["environment"]:
+        if "environment" not in self.data:
             self.data["environment"] = dict()
 
         self.data["environment"][i_name] = i_value
+
+    def addTicket(self, i_name, i_count):
+        """Missing DocString
+
+        :param i_name:
+        :param i_count:
+        :return:
+        """
+        if "tickets" not in self.data:
+            self.data["tickets"] = dict()
+
+        self.data["tickets"][i_name] = i_count
 
     def setName(self, value):
         """Missing DocString
@@ -466,18 +477,18 @@ class Block:
     def skipThumbnails(self):
         self.data['flags'] = afcommon.setBlockFlag(self.data['flags'], 'skipthumbnails')
 
-    def skipExistingFiles(self, i_size_min=-1, i_size_max=-1):
+    def skipExistingFiles(self, i_size_min = -1, i_size_max = -1):
         self.data['flags'] = afcommon.setBlockFlag(self.data['flags'], 'skipexistingfiles')
-        if i_size_min != -1:
+        if i_size_min > 0:
             self.data['file_size_min'] = i_size_min
-        if i_size_min != -1:
+        if i_size_max > 0:
             self.data['file_size_max'] = i_size_max
 
-    def checkRenderedFiles(self, i_size_min=-1, i_size_max=-1):
+    def checkRenderedFiles(self, i_size_min = -1, i_size_max = -1):
         self.data['flags'] = afcommon.setBlockFlag(self.data['flags'], 'checkrenderedfiles')
-        if i_size_min != -1:
+        if i_size_min > 0:
             self.data['file_size_min'] = i_size_min
-        if i_size_min != -1:
+        if i_size_max > 0:
             self.data['file_size_max'] = i_size_max
 
     def setMultiHost(self, h_min, h_max, h_max_wait, master_on_slave=False,
@@ -635,6 +646,13 @@ class Job:
     def setPools(self, i_pools):
         self.data['pools'] = i_pools
 
+    def tryTask(self, i_block, i_task):
+        if 'try_this_tasks_num' not in self.data:
+            self.data['try_this_tasks_num'] = []
+            self.data['try_this_blocks_num'] = []
+        self.data['try_this_tasks_num'].append(i_task)
+        self.data['try_this_blocks_num'].append(i_block)
+
     def setBranch(self, i_branch, i_transferToServer=True):
         if i_transferToServer:
             i_branch = Pathmap.toServer(i_branch)
@@ -730,7 +748,7 @@ class Job:
         :return:
         """
         if value > time.time():
-            self.data["time_wait"] = value
+            self.data["time_wait"] = int(value)
 
     def setMaxRunningTasks(self, value):
         """Missing DocString
@@ -1058,6 +1076,18 @@ class Cmd:
         self.data['operation'] = {'type': 'eject_tasks'}
         self._sendRequest()
 
+    def renderEjectAndNIMBY(self):
+        """Missing DocString
+
+        :return:
+        """
+        self.action = 'action'
+        self.data['type'] = 'renders'
+        self.data['mask'] = cgruconfig.VARS['HOSTNAME']
+        self.data['operation'] = {'type': 'eject_tasks'}
+        self.data['params'] = {'NIMBY': True}
+        self._sendRequest()
+
     def renderEjectNotMyTasks(self):
         """Missing DocString
 
@@ -1209,3 +1239,44 @@ class Cmd:
         :return:
         """
         return self.renderGetList(cgruconfig.VARS['HOSTNAME'])
+
+    def appendBlocks(self, jobId, blocks, verbose=False):
+        """Append new blocks to an existing job
+
+        :param jobId: Id of the job to which blocks are added
+        :param blocks: list of new Block() objects
+        :param bool verbose: verbosity toggle
+        :return: server response
+        """
+        blocks_data = []
+        for b in blocks:
+            b.fillTasks()
+            blocks_data.append(b.data)
+
+        self.action = 'action'
+        self.data['type'] = 'jobs'
+        self.data['ids'] = [jobId]
+        self.data['operation'] = {'type': 'append_blocks',
+                                  'blocks': blocks_data}
+        return self._sendRequest(verbose)
+
+    def appendTasks(self, jobId, blockId, tasks, verbose=False):
+        """Append new tasks to an existing block
+
+        :param jobId: Id of the job to which tasks are added
+        :param blockId: Index of the block to which tasks are added
+        :param tasks: list of new Task() objects
+        :param bool verbose: verbosity toggle
+        :return: server response
+        """
+        tasks_data = []
+        for t in tasks:
+            tasks_data.append(t.data)
+
+        self.action = 'action'
+        self.data['type'] = 'jobs'
+        self.data['ids'] = [jobId]
+        self.data['block_ids'] = [blockId]
+        self.data['operation'] = {'type': 'append_tasks',
+                                  'tasks': tasks_data}
+        return self._sendRequest(verbose)

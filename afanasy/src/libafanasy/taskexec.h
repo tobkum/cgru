@@ -26,10 +26,8 @@ public:
 			int i_file_size_min,
 			int i_file_size_max,
 
-//			const std::string & i_command,
 			const std::string & i_command_block,
 
-//			const std::vector<std::string> & i_files,
 			const std::vector<std::string> & i_files_block,
 
 			long long i_frame_start,
@@ -43,7 +41,7 @@ public:
 			int i_job_id,
 			int i_block_number,
 			long long i_block_flags,
-			int i_tast_number,
+			int i_task_number,
 
 			int i_parser_coeff = 1
 );
@@ -189,6 +187,7 @@ public:
 	/// Read or write task in message buffer.
 	void v_readwrite( Msg * msg);
 
+	std::map<std::string, int32_t> m_tickets;
 
 	std::string m_custom_data_task;
 	std::string m_custom_data_block;
@@ -238,7 +237,6 @@ private:
 	int64_t m_frames_num;    ///< Number of frames.
 
 	int64_t m_time_start;
-
 
 private:
 	void initDefaults();

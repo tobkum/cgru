@@ -1,5 +1,9 @@
 #include "name_af.h"
 
+#ifdef WINNT
+#include <cctype>
+#endif
+
 #include "../include/afanasy.h"
 #include "../include/afjob.h"
 
@@ -130,6 +134,13 @@ const std::string af::toKMG(long long i_number)
 		str += labels[pow-1];
 
 	return str;
+}
+
+const std::string af::toLower(const std::string & i_str)
+{
+	std::string lower(i_str);
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return std::tolower(c); });
+	return lower;
 }
 
 const std::string af::vectToStr( const std::vector<int32_t> & i_vec)

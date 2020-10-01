@@ -1,7 +1,6 @@
 # Afanasy binaries
-
 archives
 bin
 
-# Non root user
-nonrootuser
+# TODO: Edit cmake lists so that this RelWithDebInfo is created in bin/
+service/RelWithDebInfo/

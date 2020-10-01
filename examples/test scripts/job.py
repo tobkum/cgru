@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
 /* ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''' *\
@@ -42,9 +41,11 @@ parser.add_option(      '--frames',       dest='frames',       type='string', de
 parser.add_option('-i', '--increment',    dest='increment',    type='int',    default=1,  help='tasks "frame increment" parameter')
 parser.add_option('-p', '--pertask',      dest='pertask',      type='int',    default=1,  help='number of tasks per task')
 parser.add_option('-m', '--maxtime',      dest='maxtime',      type='int',    default=0,  help='tasks maximum run time in seconds')
+parser.add_option(      '--timeout',      dest='timeout',      type='int',    default=0,  help='tasks progress change timeout in seconds')
 parser.add_option(      '--pkp',          dest='pkp',          type='int',    default=1,  help='Parser key percentage')
 parser.add_option(      '--send',         dest='sendjob',      type='int',    default=1,  help='send job')
 parser.add_option('-w', '--waittime',     dest='waittime',     type='int',    default=0,  help='set job to wait to start time')
+parser.add_option(      '--os',           dest='os',           type='string', default=None, help='OS needed')
 parser.add_option('-c', '--capacity',     dest='capacity',     type='int',    default=0,  help='tasks capacity')
 parser.add_option(      '--capmin',       dest='capmin',       type='int',    default=-1, help='tasks variable capacity coeff min')
 parser.add_option(      '--capmax',       dest='capmax',       type='int',    default=-1, help='tasks variable capacity coeff max')
@@ -58,14 +59,17 @@ parser.add_option(      '--mhwaitsrv',    dest='mhwaitsrv',    type='int',    de
 parser.add_option(      '--mhsame',       dest='mhsame',       type='int',    default=0,  help='multi host tasks same host slave and master')
 parser.add_option(      '--mhignorelost', dest='mhignorelost', type='int',    default=0,  help='multi host mosater will ignore slave lost')
 parser.add_option(      '--mhservice',    dest='mhservice',    type='str',    default='', help='multi host tasks service command')
+parser.add_option(      '--cmd',          dest='cmd',          type='string', default=None, help='Tasks command')
 parser.add_option(      '--cmdpre',       dest='cmdpre',       type='string', default='', help='job pre command')
 parser.add_option(      '--cmdpost',      dest='cmdpost',      type='string', default='', help='job post command')
 parser.add_option(      '--parser',       dest='parser',       type='string', default=None, help='parser type, default if not set')
-parser.add_option(      '--env',          dest='environment',  type='string', default="CG_VAR=somevalue", help='add an evironment')
+parser.add_option(      '--env',          dest='environment',  type='string', default='CG_VAR=somevalue', help='add an evironment, example: "CG_VAR=somevalue"')
+parser.add_option(      '--tickets',      dest='tickets',      type='string', default='GPU:1,NET:100', help='add tickets, example: "MEM:32,NET:100"')
 parser.add_option(      '--folder',       dest='folder',       type='string', default=None, help='add a folder')
 parser.add_option(      '--nofolder',     dest='nofolder',     action='store_true', default=False, help='do not set any folders')
 parser.add_option(      '--pools',        dest='pools',        type='string', default=None, help='Set job render pools [/local/blender:90,/local/natron:10].')
 parser.add_option(      '--branch',       dest='branch',       type='string', default=None, help='Set job branch.')
+parser.add_option(      '--try',          dest='trytasks',     type='string', default=None, help='Try tasks "0:3,0:5"')
 parser.add_option(      '--seq',          dest='sequential',   type='int',    default=None, help='Sequential running')
 parser.add_option(      '--ppa',          dest='ppapproval',   action='store_true', default=False, help='Preview pending approval')
 parser.add_option('-e', '--exitstatus',   dest='exitstatus',   type='int',    default=0,  help='good exit status')
@@ -119,15 +123,21 @@ if Options.branch is not None:
 else:
     job.setBranch( os.getcwd())
 
+if Options.trytasks:
+    for pair in Options.trytasks.split(','):
+        bt = pair.split(':')
+        if len(bt) == 2:
+            job.tryTask(int(bt[0]), int(bt[1]))
+
 blocknames = []
 if Options.labels != '':
-    blocknames = Options.labels.split(':')
+    blocknames = Options.labels.split(',')
 else:
     blocknames.append('block')
 
 blocktypes = []
 if Options.services is not None:
-    blocktypes = Options.services.split(':')
+    blocktypes = Options.services.split(',')
 else:
     blocktypes.append('test')
 
@@ -167,6 +177,9 @@ for b in range(numblocks):
     if Options.maxtime:
         block.setTasksMaxRunTime(Options.maxtime)
 
+    if Options.timesec:
+        block.setTaskProgressChangeTimeout(Options.timeout)
+
     if Options.capacity != 0:
         block.setCapacity(Options.capacity)
 
@@ -178,8 +191,19 @@ for b in range(numblocks):
 
     if Options.environment:
         for env in Options.environment.split(';'):
-            val = env.split('=')
-            block.setEnv( val[0], val[1])
+            vals = env.split('=')
+            if len(vals) == 2:
+                block.setEnv(vals[0], vals[1])
+            else:
+                'Warning: Invalid environment: "%s"' % Options.environment
+
+    if Options.tickets:
+        for env in Options.tickets.split(','):
+            vals = env.split(':')
+            if len(vals) == 2:
+                block.addTicket(vals[0], int(vals[1]))
+            else:
+                'Warning: Invalid tickets: "%s"' % Options.environment
 
     str_capacity = ''
     if Options.capmin != -1 or Options.capmax != -1:
@@ -224,6 +248,9 @@ for b in range(numblocks):
                '-i %(increment)d -t %(timesec)g -r %(randtime)g --pkp %(pkp)d ' \
                '-v %(verbose)d @####@ @#####@ @#####@ @#####@' % vars()
 
+        if Options.cmd:
+            cmd = Options.cmd
+
         block.setCommand(cmd, False)
 
         if Options.frames != '':
@@ -246,6 +273,9 @@ for b in range(numblocks):
             block.setFiles(files)
             block.skipExistingFiles()
             block.checkRenderedFiles(100)
+
+        if Options.cmd:
+            cmd = Options.cmd
 
         block.setCommand( cmd, False)
 
@@ -281,7 +311,10 @@ if Options.pause:
 if Options.output:
     job.output()
 
-job.setNeedOS('')
+if Options.os is None:
+    job.setNeedOS('')
+else:
+    job.setNeedOS(Options.os)
 
 exit_status = 0
 if Options.sendjob:

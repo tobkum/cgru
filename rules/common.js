@@ -249,6 +249,16 @@ function c_Log(i_msg)
 	c_logCount++;
 }
 
+function c_LogClear()
+{
+	c_logCount = 0;
+	c_elLogs = [];
+	c_lastLog = null;
+	c_lastLogCount = 1;
+
+	u_el.log.innerHTML = '';
+}
+
 function c_AuxFolder(i_folder)
 {
 	if (i_folder.status)
@@ -465,6 +475,11 @@ function c_CanEditBody(i_user)
 	return c_IsUserStateSet(i_user, 'editbody');
 }
 
+function c_CanSetPassword(i_user)
+{
+	return c_IsUserStateSet(i_user, 'passwd');
+}
+
 function c_IsUserStateSet(i_user, i_state)
 {
 	if (i_user == null)
@@ -472,6 +487,7 @@ function c_IsUserStateSet(i_user, i_state)
 	if (i_user == null)
 		return false;
 
+	// Some states are always on for some roles:
 	if ((['playlist', 'assignart', 'edittasks', 'editbody']).indexOf(i_state) != -1)
 		if ((['admin', 'coord', 'user']).indexOf(i_user.role) != -1)
 			return true;
@@ -496,13 +512,37 @@ function c_CanCreateShot(i_user)
 	return false;
 }
 
+function c_HasFileSystem()
+{
+	return localStorage.has_filesystem == 'ON';
+}
+
+function c_CanExecuteSoft(i_user)
+{
+	if (localStorage.has_filesystem != 'ON')
+		return false;
+
+	if (localStorage.execute_soft != 'ON')
+		return false;
+
+	if (i_user == null)
+		i_user = g_auth_user;
+	if (i_user == null)
+		return false;
+
+	if ((['admin', 'coord', 'user']).indexOf(i_user.role) != -1)
+		return true;
+
+	return false;
+}
 
 // Construct from g_users sorted roles with sorted artists:
 // Provide i_users to show specified users even if he is disabled or not an artist
 function c_GetRolesArtists(i_users)
 {
 	var roles_obj = {};
-	for (var uid in g_users)
+	// Collect users by roles:
+	for (let uid in g_users)
 	{
 		// console.log(g_users[uid].states);
 		if ((i_users == null) || (i_users[uid] == null))
@@ -513,19 +553,52 @@ function c_GetRolesArtists(i_users)
 				continue;
 		}
 
-		var role = g_users[uid].role;
+		let role = g_users[uid].role;
 
 		if (roles_obj[role] == null)
-			roles_obj[role] = [];
+			roles_obj[role] = {'users':[]};
 
-		roles_obj[role].push(g_users[uid]);
+		roles_obj[role].users.push(g_users[uid]);
+	}
+
+	// Collect users by tag for earch role:
+	for (let role in roles_obj)
+	{
+		roles_obj[role].tags_obj = {};
+		for (let u in roles_obj[role].users)
+		{
+			let user = roles_obj[role].users[u];
+			let tag = user.tag;
+			if (tag == null) tag = '';
+
+			if (roles_obj[role].tags_obj[tag] == null)
+				roles_obj[role].tags_obj[tag] = [];
+
+			roles_obj[role].tags_obj[tag].push(user);
+		}
 	}
 
 	var roles = [];
-	for (var role in roles_obj)
+	for (let role in roles_obj)
 	{
-		roles_obj[role].sort(function(a, b) { return a.title > b.title });
-		roles.push({"role": role, "artists": roles_obj[role]});
+		roles_obj[role].users.sort(function(a, b) { return a.title > b.title });
+
+		let role_obj = {};
+		role_obj.role = role;
+		role_obj.artists = roles_obj[role].users;
+		role_obj.tags = [];
+
+		for (let tag in roles_obj[role].tags_obj)
+		{
+			roles_obj[role].tags_obj[tag].sort(function(a, b) { return a.title > b.title });
+
+			role_obj.tags.push({'tag':tag,'artists':roles_obj[role].tags_obj[tag]});
+		}
+
+		role_obj.tags.sort(function(a, b) { return a.tag > b.tag });
+
+		roles.push(role_obj);
+
 	}
 	roles.sort(function(a, b) { return a.role < b.role });
 
@@ -669,9 +742,10 @@ function c_FileDragStart(i_evt, i_path)
 	if (cgru_Platform.indexOf('windows') == -1)
 		path = 'file://' + path;
 	var dt = i_evt.dataTransfer;
+	dt.clearData()
 	dt.setData('text/plain', path);
 	dt.setData('text/uri-list', path);
-	// console.log(path);
+	//console.log(i_evt.dataTransfer);
 }
 
 /* ---------------- [ RU file functions ] ---------------------------------------------------------------- */
@@ -808,6 +882,56 @@ function c_MakeThumbnail(i_file, i_func)
 	n_Request({"send": {"cmdexec": {"cmds": [cmd]}}, "func": i_func, "file": i_file, "info": 'thumbnail'});
 }
 
+var c_file_good_symbols = ['_','-','.'];
+function c_IsFileGoodChar(i_char)
+{
+	var code = i_char.charCodeAt(0);
+
+	// Not ASCII
+	if (code >= 128)
+		return false;
+
+	// 0-9 (48-57)
+	if (code <= 57 && code >= 48)
+		return true;
+
+	// A-Z (65-90)
+	if (code <= 90 && code >= 65)
+		return true;
+
+	// A-Z (97-122)
+	if (code <= 122 && code >= 97)
+		return true;
+
+	if (c_file_good_symbols.indexOf(i_char) != -1)
+		return true;
+
+	return false;
+}
+
+function c_HighlightBadChars(i_file)
+{
+	var o_file = '';
+
+	for (let c = 0; c < i_file.length; c++)
+	{
+		let ch = i_file.charAt(c);
+		let bad = false == c_IsFileGoodChar(ch);
+
+		if (bad)
+		{
+			o_file += '<span class="file_bad_char">';
+			if (ch == ' ')
+				ch = '_';
+		}
+		o_file += ch;
+		if (bad)
+			o_file += '</span>';
+	}
+
+	return o_file;
+}
+
 /* ---------------- [ Path transposing functions ] ------------------------------------------------------- */
 
 function c_PathBase(i_file)
@@ -843,10 +967,25 @@ function c_PathPM_Server2Client(i_path)
 	return cgru_PM(i_path);
 }
 
+// Check where i_subfolder is located in i_folder
+function c_PathIsInFolder(i_folder, i_subfolder)
+{
+	var folders = i_folder.split('/');
+	var subs = i_subfolder.split('/');
+
+	if (folders.length > subs.length)
+		return false;
+
+	for (let i = 0; i < folders.length; i++)
+		if (folders[i] != subs[i])
+			return false;
+
+	return true;
+}
 
 function c_CreateOpenButton(i_args)
 {
-	if (RULES.has_filesystem === false)
+	if (false == c_HasFileSystem())
 		return null;
 
 	i_args.path = c_PathPM_Rules2Client(i_args.path);
@@ -926,7 +1065,7 @@ function c_GetAvatar(i_user_id, i_guest)
 		if (i_guest)
 			avatar = c_EmailDecode(avatar);
 		avatar = c_MD5(avatar.toLowerCase());
-		avatar = 'https://www.gravatar.com/avatar/' + avatar;
+		avatar = 'https://gravatar.com/avatar/' + avatar;
 	}
 
 	if (avatar && avatar.length)

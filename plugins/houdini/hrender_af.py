@@ -3,6 +3,8 @@
 
 import os
 import sys
+import time
+
 from optparse import OptionParser
 
 import parsers.hbatch
@@ -23,6 +25,7 @@ parser.add_option(      '--ds_node',       dest='ds_node',       type='string', 
 parser.add_option(      '--ds_address',    dest='ds_address',    type='string', help='Distribute simulation tracker address.')
 parser.add_option(      '--ds_port',       dest='ds_port',       type='int',    help='Distribute simulation tracker port.')
 parser.add_option(      '--ds_slice',      dest='ds_slice',      type='int',    help='Distribute simulation slice number.')
+parser.add_option(      '--report',        dest='report',        action='store_true', default=False, help='Ouput frame progress as job report.')
 parser.add_option('-i', '--ignore_inputs', dest='ignore_inputs', action='store_true', default=False, help='Ignore inputs')
 
 options, args = parser.parse_args()
@@ -50,7 +53,7 @@ ignoreInputs = options.ignore_inputs
 
 
 # Loading HIP file, and force HIP variable:
-force_hip = True  # not sure, we need to force HIP variable.
+force_hip = False  # not sure, we need to force HIP variable.
 # May be this code is obsolete
 if force_hip:
     envhip = os.path.abspath(hip)
@@ -84,9 +87,9 @@ if rop[0] != '/':
 ropnode = hou.node(rop)
 
 if ropnode is None:
-    raise hou.InvalidNodeName(rop + ' rop node wasn`t found')
+    raise hou.InvalidNodeName(rop + " rop node wasn't found")
 
-# Trying to set ROP to block until render comletes
+# Trying to set ROP to block until render completes
 # block = ropnode.parm('soho_foreground')
 # if block != None:
 # value = block.eval()
@@ -97,10 +100,8 @@ if ropnode is None:
 # except:
 # print 'Failed to set node blocking.'
 
-print wedge, wedgenum
-
 if wedge:
-    print 'working with wedges'
+    print('working with wedges', wedge, wedgenum)
     wedgenode = hou.node(wedge)
 
     # below code use use script from wedge node definition
@@ -204,17 +205,9 @@ elif drivertypename == "arnold":
                 print('Failed, frame progress not available.')
 
 elif drivertypename == "alembic":
-    ropnode.parm('lpostframe').set('python')
-    expr = r'''import sys
-    
-elif drivertypename == "Redshift_ROP":
-    # Trying to set ROP to output progress
-    print('Trying to set Redshift log level to "Debug"')
     try:
-        hou.hscript("Redshift_setLogLevel -L 5")
-    except:
-        print('Failed, frame progress not available.')
-    
+        ropnode.parm('lpostframe').set('python')
+        expr = r'''import sys
 f = hou.parmTuple('f').eval()
 percent = int(100*(hou.frame()-f[0])/(f[1]-f[0]))
 
@@ -222,7 +215,22 @@ out = 'ABC_PROGRESS ' + str(percent) + '%\n'
 
 sys.stdout.write(out)
 sys.stdout.flush()'''
-    ropnode.parm('postframe').set(expr)
+        ropnode.parm('postframe').set(expr)
+    except:
+        print('Failed, frame progress not available.')
+
+elif drivertypename == "Redshift_ROP":
+    # Trying to set ROP to output progress
+    print('Trying to set Redshift log level to "Debug"')
+    try:
+        hou.hscript("Redshift_setLogLevel -L 5")
+    except:
+        print('Failed, frame progress not available.')
+
+    # Try setting separate GPU masks
+    if 'GPU_MASK' in os.environ:
+        mask = os.environ['GPU_MASK']
+        hou.hscript('Redshift_setGPU -s %s' % mask)
 
 #
 # Distribute simulation:
@@ -273,14 +281,39 @@ if output is not None and len(output) > 0:
     render_output = output
 
 frame = start
+
+if drivertypename == "alembic":
+    ropnode.render(
+            output_file=render_output,
+            method=hou.renderMethod.FrameByFrame,
+            ignore_inputs=ignoreInputs
+        )
+
+time_prev = None
 while frame <= end:
-    render_range = (frame, frame, by)
-    print(parsers.hbatch.keyframe + str(frame))
+    # Ouput frame and time:
+    time_cur = time.time()
+    time_str = ''
+    if time_prev is not None:
+        seconds = time_cur-time_prev
+        minutes = int(seconds / 60)
+        seconds = int(round(seconds - 60*minutes))
+        time_str = '; Last Frame: %d\'%02d' % (minutes, seconds)
+    time_prev = time_cur
+    report = ropnode.path() + ': ' + parsers.hbatch.keyframe + str(frame) + '; Started at: ' + time.strftime('%X') + time_str
+    if options.report:
+        report = 'REPORT: ' + report
+    print(report)
     sys.stdout.flush()
+
+    # Launch render function:
+    render_range = (frame, frame, by)
     ropnode.render(
         frame_range=render_range,
         output_file=render_output,
         method=hou.renderMethod.FrameByFrame,
         ignore_inputs=ignoreInputs
     )
+
+    # Increment frame:
     frame += by

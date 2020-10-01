@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
 import sys
@@ -26,6 +25,7 @@ Parser.add_option('-q', '--qscale',    dest='qscale',    type  ='int',    defaul
 Parser.add_option('-s', '--timestart', dest='timestart', type  ='string', default=None,     help='Time start')
 Parser.add_option('-d', '--duration',  dest='duration',  type  ='string', default=None,     help='Duration')
 Parser.add_option('-p', '--padding',   dest='padding' ,  type  ='int',    default=7,        help='Padding')
+Parser.add_option(      '--first',     dest='first' ,    type  ='int',    default=1,        help='First frame number')
 Parser.add_option('-w', '--watermark', dest='watermark', type  ='string', default=None,     help='Add watermark')
 Parser.add_option('-u', '--suffix',    dest='suffix',    type  ='string', default=None,     help='Add suffix to ouput file name')
 Parser.add_option(      '--imgname',   dest='imgname',   type  ='string', default=None,     help='Images files name (frame)')
@@ -59,30 +59,29 @@ if Output is None:
     Output = Input
 
 Sequence = []
-StartNumber = None
+Pattern = None
 if os.path.isdir(Input):
-    InDir = Input
-    allfiles = os.listdir(InDir)
+    allfiles = os.listdir(Input)
     allfiles.sort()
     for afile in allfiles:
         if afile[0] == '.': continue
-        afile = os.path.join( InDir, afile)
-        if os.path.isdir( afile): continue
+        afile = os.path.join(Input, afile)
+        if os.path.isdir(afile): continue
 
-        Sequence.append( afile)
+        Sequence.append(afile)
 
-        if StartNumber is not None: continue
+        if Pattern is not None: continue
 
-        afile = os.path.basename( afile)
+        afile = os.path.basename(afile)
         digits = re.findall(r'\d+', afile)
         if len(digits) == 0: continue
         digits = digits[-1]
-        StartNumber = int(digits)
-        Input = afile[:afile.rfind(digits)]
-        Input += '%0' + str(len(digits)) + 'd'
-        Input += afile[afile.rfind(digits) + len(digits):]
-        Input = os.path.join(argv[0], Input)
+        Pattern = afile[:afile.rfind(digits)]
+        Pattern += '*'
+        Pattern += afile[afile.rfind(digits) + len(digits):]
+        Pattern = os.path.join(argv[0], Pattern)
         continue
+    Input = Pattern
 else:
     if not os.path.isfile(Input):
         print('ERROR: Input does not exist: ' + Input)
@@ -122,6 +121,9 @@ if Codec is None:
             resize.append('-1')
         cmd += ' -vf "%s"' % ('scale=%s:%s' % (resize[0], resize[1]))
         Output += '.r%s' % Options.resize
+
+    # Specify first frame number:
+    cmd += ' -start_number %d' % Options.first
 
     # Add images type (extension,format) to output:
     Output += '.' + Options.type
@@ -174,31 +176,34 @@ else:
         Output += '.' + Options.suffix
 
     auxargs = ''
-    if Options.resize is not None or Options.watermark is not None:
-        filter_complex = ''
-        if Options.ipar is not None:
-            if len(filter_complex): filter_complex += ','
-            filter_complex += 'scale=iw:ih/%s' % Options.ipar
-            if Options.opar is None:
-                filter_complex += ',setsar=1'
-        if Options.opar is not None:
-            if len(filter_complex): filter_complex += ','
-            filter_complex += 'setsar=%s' % Options.opar
-        if Options.resize is not None:
-            if len(filter_complex): filter_complex += ','
-            resize = Options.resize.split('x')
-            if len(resize) < 2:
-                hresize.append('-1')
-            filter_complex += 'scale=%s:-1,crop=%s:min(%s\\,ih),pad=%s:%s:0:max((%s-ih)/2\\,0)' % (resize[0], resize[0],resize[1], resize[0],resize[1],resize[1])
-            Output += '.r%s' % Options.resize
-        if Options.watermark is not None:
-            if not os.path.isfile( Options.watermark):
-                print('ERROR: Watermark file does not exist:\n' + Options.watermark)
-                sys.exit(1)
-            auxargs += ' -i "%s"' % Options.watermark
-            if len(filter_complex): filter_complex += ','
-            filter_complex += 'overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2'
-        auxargs += ' -filter_complex "%s"' % filter_complex
+    filter_complex = []
+    filter_complex_scale = []
+    if Options.codec.find('prores') == 0:
+        filter_complex_scale.append('out_color_matrix=bt709')
+    if Options.ipar is not None:
+        filter_complex_scale.append('w=iw:h=ih/%s' % Options.ipar)
+        if Options.opar is None:
+            filter_complex.append('setsar=1')
+    if Options.opar is not None:
+        filter_complex.append('setsar=%s' % Options.opar)
+    if Options.resize is not None:
+        resize = Options.resize.split('x')
+        if len(resize) < 2: resize.append('-1')
+        filter_complex_scale.append('w=%s:h=-1' % resize[0])
+        filter_complex.append('crop=%s:min(%s\\,ih)' % (resize[0],resize[1]))
+        filter_complex.append('pad=%s:%s:0:max((%s-ih)/2\\,0)' % (resize[0],resize[1],resize[1]))
+        Output += '.r%s' % Options.resize
+    if Options.watermark is not None:
+        if not os.path.isfile( Options.watermark):
+            print('ERROR: Watermark file does not exist:\n' + Options.watermark)
+            sys.exit(1)
+        auxargs += ' -i "%s"' % Options.watermark
+        filter_complex.append('overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2')
+    if len(filter_complex_scale):
+        filter_complex_scale = "scale=%s" % (':'.join(filter_complex_scale))
+        filter_complex = [filter_complex_scale] + filter_complex
+    if len(filter_complex):
+        auxargs += ' -filter_complex "%s"' % (','.join(filter_complex))
     if Options.timestart:
         auxargs += ' -ss "%s"' % Options.timestart
     if Options.duration:
@@ -207,8 +212,8 @@ else:
         auxargs += ' -i "%s" -shortest -codec:a %s' % (Options.audio,Options.acodec)
 
     avcmd = Options.avcmd
-    if StartNumber:
-        avcmd += ' -start_number ' + str(StartNumber)
+    if Pattern:
+        avcmd += ' -pattern_type glob'
 
     cmd = cmd.replace('@AVCMD@', avcmd)
     cmd = cmd.replace('@INPUT@', Input)

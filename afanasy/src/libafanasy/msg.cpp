@@ -430,7 +430,7 @@ bool Msg::checkValidness()
 	if( m_version != Msg::Version)
 	{
 		if( af::Environment::isClient())
-			AFERRAR("Msg::checkValidness: Version mismatch: Recieved(%d) != Library(%d)", m_version, Msg::Version)
+			AFERRAR("Msg::checkValidness: Version mismatch: Received(%d) != Library(%d)", m_version, Msg::Version)
 		m_type = Msg::TVersionMismatch;
 		m_int32 = 0;
 		return true;
@@ -577,6 +577,9 @@ const char * Msg::TNAMES[]=
 
 	/*- Branches messages -*/
 	"TBranchesList",              ///< Branches nodes list.
+
+	/*- Pools messages -*/
+	"TPoolsList",                 ///< Pools nodes list.
 
 	/*- Job messages -*/
 	"TJobsList",                  ///< Jobs list information.

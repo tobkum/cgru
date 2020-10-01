@@ -48,7 +48,7 @@ TaskRunMulti::TaskRunMulti( Task * i_runningTask,
 	// Let block increase renders counters.
 	// Needed to max run tasks per host limit.
 	// This block function also adds counts on its job.
-	m_block->addSolveCounts(i_monitoring, m_exec, i_render);
+	m_block->addSolveCounts(i_monitoring, i_taskExec, i_render);
 
 	m_has_service = ( m_block->m_data->getMultiHostService().empty() == false);
 	m_tasknum = i_taskExec->getTaskNum();
@@ -407,7 +407,7 @@ void TaskRunMulti::stop( const std::string & message, RenderContainer * renders,
 		else
 		{
 			// Finish tasks on slaves if there is no service
-			render->taskFinished( *tIt, monitoring);
+			render->taskFinished(*tIt, m_progress->state, monitoring);
 			m_task->v_appendLog( std::string("Finished task[") + af::itos((*tIt)->getNumber()) +
 					"] on host \"" + render->getName() + "\"");
 			delete *tIt;
@@ -488,7 +488,7 @@ void TaskRunMulti::releaseHost( RenderContainer * renders, MonitorContainer * mo
 		}
 		else
 		{
-			render->taskFinished( *tIt, monitoring);
+			render->taskFinished(*tIt, m_progress->state, monitoring);
 			m_task->v_appendLog( std::string("Releasing task[") + af::itos((*tIt)->getNumber()) +
 				"] on host \"" + render->getName() + "\"");
 		}

@@ -18,6 +18,7 @@
 #include "listusers.h"
 #include "listrenders.h"
 #include "listmonitors.h"
+#include "listwork.h"
 #include "monitorhost.h"
 #include "offlinescreen.h"
 #include "watch.h"
@@ -49,7 +50,7 @@ int Dialog::ms_size_border_right = 75;
 Dialog::Dialog():
     m_connected(false),
     m_monitorType( Watch::WNONE),
-	m_qafclient( this, af::Environment::getWatchConnectRetries()),
+	m_qafclient(this, af::Environment::getWatchConnectionLostTime()),
     m_listitems( NULL),
     m_offlinescreen( NULL),
     m_repaintTimer( this),
@@ -93,18 +94,31 @@ Dialog::Dialog():
     m_labelversion = new LabelVersion(this);
     m_vlayout_b->addWidget( m_labelversion);
 
-//    m_topleft  = new QWidget( this);
 	m_topleft  = new QLabel("", this);
-    m_topright = new QWidget( this);
-    m_hlayout_b->addWidget( m_topleft);
-    m_btnMonitor[Watch::WJobs]    = new ButtonMonitor( Watch::WJobs,    this);
-    m_hlayout_b->addWidget( m_btnMonitor[Watch::WJobs    ]);
-    m_btnMonitor[Watch::WRenders] = new ButtonMonitor( Watch::WRenders, this);
-    m_hlayout_b->addWidget( m_btnMonitor[Watch::WRenders ]);
-    m_btnMonitor[Watch::WUsers]   = new ButtonMonitor( Watch::WUsers,   this);
-    m_hlayout_b->addWidget( m_btnMonitor[Watch::WUsers   ]);
-    m_hlayout_b->addWidget( m_topright);
-	
+	m_topright = new QWidget(this);
+
+	m_hlayout_b->addWidget(m_topleft);
+
+	m_btnMonitor[Watch::WWork] = new ButtonMonitor(Watch::WWork, this);
+	m_hlayout_b->addWidget(m_btnMonitor[Watch::WWork]);
+	if (false == af::Environment::getWatchWorkUserVisible())
+		m_btnMonitor[Watch::WWork]->setHidden(true);
+
+	m_btnMonitor[Watch::WJobs] = new ButtonMonitor(Watch::WJobs, this);
+	m_hlayout_b->addWidget(m_btnMonitor[Watch::WJobs ]);
+
+	m_btnMonitor[Watch::WFarm] = new ButtonMonitor(Watch::WFarm, this);
+	m_hlayout_b->addWidget(m_btnMonitor[Watch::WFarm ]);
+
+	m_btnMonitor[Watch::WUsers] = new ButtonMonitor(Watch::WUsers, this);
+	m_hlayout_b->addWidget(m_btnMonitor[Watch::WUsers]);
+
+	m_hlayout_b->addWidget(m_topright);
+
+	m_btnMonitor[Watch::WMonitors] = new ButtonMonitor(Watch::WMonitors, this);
+	m_hlayout_b->addWidget(m_btnMonitor[Watch::WMonitors]);
+	m_btnMonitor[Watch::WMonitors]->setHidden(true);
+
 	connect( &m_qafclient, SIGNAL( sig_newMsg( af::Msg*)), this, SLOT( newMessage( af::Msg*)));
 	connect( &m_qafclient, SIGNAL( sig_connectionLost()),  this, SLOT( connectionLost()));
 	connect( &m_qafclient, SIGNAL( sig_finished()),        this, SLOT( close()));
@@ -318,7 +332,12 @@ void Dialog::connectionLost()
         ButtonMonitor::unset();
     }
 
-    displayError("Connection lost.");
+	if (m_connected)
+	{
+		AF_WARN << "Watch connection lost, trying to reconnect...";
+		displayError("Connection lost.");
+	}
+
     m_connected = false;
     setWindowTitle( "Watch - " + afqt::stoq( af::Environment::getUserName()) + " (connecting...)");
 
@@ -480,9 +499,18 @@ void Dialog::idReceived( int i_id, int i_uid)
 
 void Dialog::closeList()
 {
-    if( m_listitems != NULL) m_listitems->close();
-    m_listitems = NULL;
-    m_monitorType = Watch::WNONE;
+	if (m_listitems != NULL)
+	{
+		//delete m_listitems;
+		// Better not delete qt widgets manually, let qt to delete them.
+		// There still can be events queue.
+		// But we should keep in mind, that qt can delete it with some delay.
+		// New list item class constructor can be called before old list items class destructor.
+		m_listitems->close();
+	}
+
+	m_listitems = NULL;
+	m_monitorType = Watch::WNONE;
 }
 
 bool Dialog::openMonitor( int type, bool open)
@@ -518,37 +546,44 @@ bool Dialog::openMonitor( int type, bool open)
       closeList();
    }
 
-   switch( type)
-   {
-   case Watch::WJobs:
-   {
-      newlist = new ListJobs( parent);
-      displayInfo("Your jobs list.");
-      break;
-   }
-   case Watch::WUsers:
-   {
-      newlist = new ListUsers( parent);
-      displayInfo("Users list.");
-     break;
-   }
-   case Watch::WRenders:
-   {
-      newlist = new ListRenders( parent);
-      displayInfo("Render hosts list.");
-      break;
-   }
-   case Watch::WMonitors:
-   {
-      newlist = new ListMonitors( parent);
-      displayInfo("Connected monitors.");
-      break;
-   }
-   default:
-      AFERRAR("Dialog::changeMonitor: unknown type = %d", type)
-      if( false == open ) m_monitorType = Watch::WNONE;
-      return false;
-   }
+	switch( type)
+	{
+	case Watch::WWork:
+	{
+		newlist = new ListWork(parent);
+		displayInfo("Branches/jobs list.");
+		break;
+	}
+	case Watch::WJobs:
+	{
+		newlist = new ListJobs(parent);
+		displayInfo("Your jobs list.");
+		break;
+	}
+	case Watch::WUsers:
+	{
+		newlist = new ListUsers(parent);
+		displayInfo("Users list.");
+		break;
+	}
+	case Watch::WFarm:
+	{
+		newlist = new ListRenders(parent);
+		displayInfo("Farm pools/renders list.");
+		break;
+	}
+	case Watch::WMonitors:
+	{
+		newlist = new ListMonitors(parent);
+		displayInfo("Connected monitors.");
+		break;
+	}
+	default:
+		AFERRAR("Dialog::changeMonitor: unknown type = %d", type)
+		if (false == open)
+			m_monitorType = Watch::WNONE;
+		return false;
+}
 
    if( open )
    {
@@ -569,34 +604,34 @@ void Dialog::keyPressEvent( QKeyEvent * event)
    const QString key( event->text());
    if( key.isNull() || key.isEmpty() ) return;
 
-   if( af::Environment::checkKey( key.at(0).toLatin1()))
-   {
-      if( af::Environment::GOD())
-      {
+	if (af::Environment::checkKey(key.at(0).toLatin1()))
+	{
+		if (af::Environment::GOD())
+		{
 			MonitorHost::setUid(0);
 
-         m_btnMonitor[Watch::WMonitors] = new ButtonMonitor( Watch::WMonitors, this);
-         m_hlayout_b->addWidget( m_btnMonitor[Watch::WMonitors]);
+			if (false == af::Environment::getWatchWorkUserVisible())
+				m_btnMonitor[Watch::WWork]->setHidden(false);
+			m_btnMonitor[Watch::WMonitors]->setHidden(false);
 
 			m_topleft->setText("GOD MODE");
-      }
-      else if( af::Environment::VISOR())
-      {
+		}
+		else if (af::Environment::VISOR())
+		{
 			MonitorHost::setUid(0);
 
 			m_topleft->setText("VISOR MODE");
-      }
-      else
-      {
+		}
+		else
+		{
 			MonitorHost::setUid(-1);
 
-         if( m_btnMonitor[Watch::WMonitors])
-         {
-            delete m_btnMonitor[Watch::WMonitors];
-            m_btnMonitor[Watch::WMonitors] = NULL;
-         }
+			if (false == af::Environment::getWatchWorkUserVisible())
+				m_btnMonitor[Watch::WWork]->setHidden(true);
+			m_btnMonitor[Watch::WMonitors]->setHidden(true);
+
 			m_topleft->setText("");
-      }
+		}
       int opened_type = m_monitorType ;
       closeList();
 //      ButtonMonitor::unset();

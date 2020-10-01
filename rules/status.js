@@ -128,9 +128,17 @@ function Status(i_obj, i_args)
 	this.show();
 }
 
-Status.prototype.show = function(i_status) {
+Status.prototype.show = function(i_status, i_update = false) {
 	if (i_status)
-		this.obj = i_status;
+	{
+		if (i_update && this.obj)
+		{
+			for (let k in i_status)
+				this.obj[k] = i_status[k];
+		}
+		else
+			this.obj = i_status;
+	}
 
 	this.editCancel();
 
@@ -395,38 +403,27 @@ function st_SetElArtists(i_status, i_el, i_short)
 }
 function st_SetElFlags(i_status, i_elFlags, i_short)
 {
-	if (i_short)
-	{
-		var flags = '';
-		if (i_status && i_status.flags)
-			for (var i = 0; i < i_status.flags.length; i++)
-			{
-				if (i)
-					flags += ' ';
-				flags += c_GetFlagShort(i_status.flags[i]);
-			}
-		i_elFlags.textContent = flags;
-		return;
-	}
-
 	if (i_elFlags.m_elFlags)
-		for (i = 0; i < i_elFlags.m_elFlags.length; i++)
-			i_elFlags.removeChild(i_elFlags.m_elFlags[i]);
+		for (let el of i_elFlags.m_elFlags)
+			i_elFlags.removeChild(el);
 	i_elFlags.m_elFlags = [];
 
 	if (i_status && i_status.flags)
-		for (var i = 0; i < i_status.flags.length; i++)
+		for (let flag of i_status.flags)
 		{
-			var el = document.createElement('div');
+			let el = document.createElement('div');
 			i_elFlags.appendChild(el);
 			i_elFlags.m_elFlags.push(el);
 			el.classList.add('flag');
-			el.textContent = c_GetFlagTitle(i_status.flags[i]);
-			el.title = c_GetFlagTip(i_status.flags[i]);
+			if (i_short)
+				el.textContent = c_GetFlagShort(flag);
+			else
+				el.textContent = c_GetFlagTitle(flag);
+			el.title = c_GetFlagTip(flag);
 
-			var clr = null;
-			if (RULES.flags[i_status.flags[i]] && RULES.flags[i_status.flags[i]].clr)
-				clr = RULES.flags[i_status.flags[i]].clr;
+			let clr = null;
+			if (RULES.flags[flag] && RULES.flags[flag].clr)
+				clr = RULES.flags[flag].clr;
 			if (clr)
 				st_SetElColor({"color": clr}, el);
 		}
@@ -471,6 +468,7 @@ function st_SetElColor(i_status, i_elBack, i_elColor, i_setNone)
 		i_setNone = true;
 
 	var c = null;
+	var a = 1;
 	if (i_status && i_status.color)
 	{
 		c = i_status.color;
@@ -479,17 +477,15 @@ function st_SetElColor(i_status, i_elBack, i_elColor, i_setNone)
 	{
 		var flag = i_status.flags[i_status.flags.length - 1];
 		if (RULES.flags[flag] && RULES.flags[flag].clr)
+		{
 			c = RULES.flags[flag].clr;
+		}
 	}
 
 	if (c)
 	{
-		i_elBack.style.background = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
-		if (c[0] + c[1] + .3 * c[2] > 300)
-			i_elColor.style.color = '#000';
-		else
-			i_elColor.style.color = '#FFF';
-		// window.console.log(c[0]+c[1]+c[2])
+		i_elBack.style.backgroundColor = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+		st_SetElColorTextFromBack(c, i_elColor);
 		return true;
 	}
 	else if (i_setNone)
@@ -497,7 +493,7 @@ function st_SetElColor(i_status, i_elBack, i_elColor, i_setNone)
 		if (localStorage.background && localStorage.background.length)
 			i_elBack.style.background = localStorage.background;
 		else
-			i_elBack.style.backgroundColor = u_backgroundColor;
+			i_elBack.style.background = u_background;
 
 		if (localStorage.text_color && localStorage.text_color.length)
 			i_elColor.style.color = localStorage.text_color;
@@ -506,6 +502,14 @@ function st_SetElColor(i_status, i_elBack, i_elColor, i_setNone)
 	}
 	return false;
 }
+function st_SetElColorTextFromBack(i_clr, i_el)
+{
+	if (i_clr[0] + i_clr[1] + .3 * i_clr[2] > 300)
+		i_el.style.color = '#000';
+	else
+		i_el.style.color = '#FFF';
+}
+
 function st_SetElFinish(i_status, i_elFinish, i_full)
 {
 	if (i_full == null)
@@ -658,52 +662,60 @@ Status.prototype.edit = function(i_args) {
 			};
 
 
+	// If several statuses selected, we check/set "half" state
 	if (i_args && i_args.statuses)
-		for (var s = 0; s < i_args.statuses.length; s++)
+		for (let s = 0; s < i_args.statuses.length; s++)
 		{
 			if (i_args.statuses[s].obj && i_args.statuses[s].obj.artists)
-				for (var a = 0; a < i_args.statuses[s].obj.artists.length; a++)
-				{
-					for (var id in artists)
-						if (i_args.statuses[s].obj.artists.indexOf(id) == -1)
-							artists[id].half = true;
+			{
+				for (let id in artists)
+					if (i_args.statuses[s].obj.artists.indexOf(id) == -1)
+						artists[id].half = true;
 
-					var id = i_args.statuses[s].obj.artists[a];
+				for (let a = 0; a < i_args.statuses[s].obj.artists.length; a++)
+				{
+					let id = i_args.statuses[s].obj.artists[a];
 					if (artists[id] == null)
 						artists[id] = {"title": c_GetUserTitle(id), "half": true};
 				}
+			}
 			else
-				for (var id in artists)
+				for (let id in artists)
 					artists[id].half = true;
 
 			if (i_args.statuses[s].obj && i_args.statuses[s].obj.flags)
-				for (var a = 0; a < i_args.statuses[s].obj.flags.length; a++)
-				{
-					for (var id in flags)
-						if (i_args.statuses[s].obj.flags.indexOf(id) == -1)
-							flags[id].half = true;
+			{
+				for (let id in flags)
+					if (i_args.statuses[s].obj.flags.indexOf(id) == -1)
+						flags[id].half = true;
 
-					var id = i_args.statuses[s].obj.flags[a];
+				for (let a = 0; a < i_args.statuses[s].obj.flags.length; a++)
+				{
+
+					let id = i_args.statuses[s].obj.flags[a];
 					if (flags[id] == null)
 						flags[id] = {"title": c_GetFlagTitle(id), "half": true, "tooltip": c_GetFlagTip(id)};
 				}
+			}
 			else
-				for (var id in flags)
+				for (let id in flags)
 					flags[id].half = true;
 
 			if (i_args.statuses[s].obj && i_args.statuses[s].obj.tags)
-				for (var a = 0; a < i_args.statuses[s].obj.tags.length; a++)
-				{
-					for (var id in tags)
-						if (i_args.statuses[s].obj.tags.indexOf(id) == -1)
-							tags[id].half = true;
+			{
+				for (let id in tags)
+					if (i_args.statuses[s].obj.tags.indexOf(id) == -1)
+						tags[id].half = true;
 
-					var id = i_args.statuses[s].obj.tags[a];
+				for (let a = 0; a < i_args.statuses[s].obj.tags.length; a++)
+				{
+					let id = i_args.statuses[s].obj.tags[a];
 					if (tags[id] == null)
 						tags[id] = {"title": c_GetTagTitle(id), "half": true, "tooltip": c_GetTagTip(id)};
 				}
+			}
 			else
-				for (var id in tags)
+				for (let id in tags)
 					tags[id].half = true;
 		}
 
@@ -841,15 +853,20 @@ Status.prototype.getMultiVale = function(i_key, i_statuses) {
 		i_statuses.push(this);
 
 	var value = this.obj[i_key];
-
 	if ((i_statuses.length == 1) && (i_statuses[0] == this))
 		return value;
 
-	for (var i = 0; i < i_statuses.length; i++)
+	if (value == "" || ((typeof value) == 'undefined'))
+		value = null;
+
+	for (let i = 0; i < i_statuses.length; i++)
 	{
-		var other = null;
+		let other = null;
 		if ((i_statuses[i].obj) && (i_statuses[i].obj[i_key]))
 			other = i_statuses[i].obj[i_key];
+
+		if (other == "" || ((typeof other) == 'undefined'))
+			other = null;
 
 		if (value != other)
 		{
@@ -868,7 +885,7 @@ Status.prototype.editListShow = function(i_args) {
 	if (localStorage.background && localStorage.background.length)
 		elRoot.style.background = localStorage.background;
 	else
-		elRoot.style.backgroundColor = u_backgroundColor;
+		elRoot.style.background = u_background;
 	if (localStorage.text_color && localStorage.text_color.length)
 		elRoot.style.color = localStorage.text_color;
 	else
@@ -938,9 +955,18 @@ Status.prototype.editListEdit = function(i_args) {
 		return;
 	}
 
-	for (var item in i_args.list_all)
+	let new_line = false;
+	for (let item in i_args.list_all)
 	{
-		var el = document.createElement('div');
+		if (new_line)
+		{
+			let el = document.createElement('div');
+			i_args.elRoot.appendChild(el);
+			el.classList.add('new_line');
+			new_line = false;
+		}
+
+		let el = document.createElement('div');
 		i_args.elRoot.appendChild(el);
 		el.classList.add('tag');
 		if (i_args.name == 'flags')
@@ -948,10 +974,15 @@ Status.prototype.editListEdit = function(i_args) {
 			el.classList.add('flag');
 			if (RULES.flags[item] && RULES.flags[item].clr)
 			{
-				var c = RULES.flags[item].clr;
-				el.style.borderColor = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+				let c = RULES.flags[item].clr;
+				el.style.borderColor = 'rgb(' + c[0]*0.5 + ',' + c[1]*0.5 + ',' + c[2]*0.5 + ')';
+				el.style.backgroundColor = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
 			}
+
+			if (RULES.flags[item] && RULES.flags[item].new_line)
+				new_line = true;
 		}
+
 		el.m_item = item;
 
 		if (i_args.list_all[item].title)
@@ -994,52 +1025,67 @@ Status.prototype.editArtistsEdit = function(i_args) {
 		elLabel.classList.add('label');
 		elLabel.textContent = roles[r].role + ':';
 
-		for (var a = 0; a < roles[r].artists.length; a++)
+		for (let t = 0; t < roles[r].tags.length; t++)
 		{
-			var artist = roles[r].artists[a];
+			let tag = roles[r].tags[t].tag;
 
-			var el = document.createElement('div');
-			elRole.appendChild(el);
-			el.classList.add('tag');
-			el.classList.add('artist');
-			el.m_item = artist.id;
-			if (artist.id == g_auth_user.id)
-				el.classList.add('me');
+			let elTag = document.createElement('div');
+			elTag.classList.add('role_tag');
+			elRole.appendChild(elTag);
 
-			if (g_users[artist.id] && g_users[artist.id].disabled)
-				el.classList.add('disabled');
+			let elLabel = document.createElement('div');
+			elLabel.textContent = c_GetTagTitle(tag) + ':';
+			elLabel.title = c_GetTagTip(tag);
+			elLabel.classList.add('label');
+			elTag.appendChild(elLabel);
 
-			if (artist.title)
-				el.textContent = artist.title;
-			else
-				el.textContent = artist.id;
-
-			if (artist.tip)
-				el.title = artist.tip;
-
-			var avatar = c_GetAvatar(artist.id);
-			if (avatar)
+			for (let a = 0; a < roles[r].tags[t].artists.length; a++)
 			{
-				el.classList.add('with_icon');
-				el.style.backgroundImage = 'url(' + avatar + ')';
-			}
+				let artist = roles[r].tags[t].artists[a];
 
-			if (i_args.list[artist.id])
-			{
-				if (i_args.list[artist.id].half)
-				{
-					el.m_half_selected = true;
-					el.classList.add('half_selected');
-				}
+				var el = document.createElement('div');
+				elTag.appendChild(el);
+				el.classList.add('tag');
+				el.classList.add('artist');
+				el.m_item = artist.id;
+				if (artist.id == g_auth_user.id)
+					el.classList.add('me');
+
+				if (g_users[artist.id] && g_users[artist.id].disabled)
+					el.classList.add('disabled');
+
+				if (artist.title)
+					el.textContent = artist.title;
 				else
-				{
-					el.m_selected = true;
-					el.classList.add('selected');
-				}
-			}
+					el.textContent = artist.id;
 
-			el.onclick = status_elToggleSelection;
-			i_args.elEdit[i_args.name].push(el);
+				if (artist.tip)
+					el.title = artist.tip;
+
+				var avatar = c_GetAvatar(artist.id);
+				if (avatar)
+				{
+					el.classList.add('with_icon');
+					el.style.backgroundImage = 'url(' + avatar + ')';
+				}
+
+				if (i_args.list[artist.id])
+				{
+					if (i_args.list[artist.id].half)
+					{
+						el.m_half_selected = true;
+						el.classList.add('half_selected');
+					}
+					else
+					{
+						el.m_selected = true;
+						el.classList.add('selected');
+					}
+				}
+
+				el.onclick = status_elToggleSelection;
+				i_args.elEdit[i_args.name].push(el);
+			}
 		}
 	}
 };
@@ -1258,12 +1304,12 @@ Status.prototype.editSave = function(i_args) {
 	if (this.elEdit.artists)
 	{
 		artists = {};
-		var elList = this.elEdit.artists;
-		for (var i = 0; i < elList.length; i++)
+		let elList = this.elEdit.artists;
+		for (let i = 0; i < elList.length; i++)
 		{
 			if (elList[i].m_selected)
 				artists[elList[i].m_item] = 'selected';
-			else if (elList[i].m_half_selected)
+			else if (elList[i].classList.contains('half_selected'))
 				artists[elList[i].m_item] = 'half_selected';
 		}
 	}
@@ -1271,12 +1317,12 @@ Status.prototype.editSave = function(i_args) {
 	if (this.elEdit.flags)
 	{
 		flags = {};
-		var elList = this.elEdit.flags;
-		for (var i = 0; i < elList.length; i++)
+		let elList = this.elEdit.flags;
+		for (let i = 0; i < elList.length; i++)
 		{
 			if (elList[i].m_selected)
 				flags[elList[i].m_item] = 'selected';
-			else if (elList[i].m_half_selected)
+			else if (elList[i].classList.contains('half_selected'))
 				flags[elList[i].m_item] = 'half_selected';
 		}
 	}
@@ -1284,12 +1330,12 @@ Status.prototype.editSave = function(i_args) {
 	if (this.elEdit.tags)
 	{
 		tags = {};
-		var elList = this.elEdit.tags;
-		for (var i = 0; i < elList.length; i++)
+		let elList = this.elEdit.tags;
+		for (let i = 0; i < elList.length; i++)
 		{
 			if (elList[i].m_selected)
 				tags[elList[i].m_item] = 'selected';
-			else if (elList[i].m_half_selected)
+			else if (elList[i].classList.contains('half_selected'))
 				tags[elList[i].m_item] = 'half_selected';
 		}
 	}
@@ -1298,27 +1344,27 @@ Status.prototype.editSave = function(i_args) {
 	{
 		tasks = [];
 
-		for (var t = 0; t < this.elEdit_tasks.elTasks.length; t++)
+		for (let t = 0; t < this.elEdit_tasks.elTasks.length; t++)
 		{
-			var elTask = this.elEdit_tasks.elTasks[t];
-			var task = {};
+			let elTask = this.elEdit_tasks.elTasks[t];
+			let task = {};
 
-			var duration = parseFloat(c_Strip(elTask.m_elDur.textContent));
+			let duration = parseFloat(c_Strip(elTask.m_elDur.textContent));
 			if (!isNaN(duration))
 				task.duration = duration;
 
-			var price = parseFloat(c_Strip(elTask.m_elPrice.textContent));
+			let price = parseFloat(c_Strip(elTask.m_elPrice.textContent));
 			if (!isNaN(price))
 				task.price = price;
 
 			if (elTask.m_elTags.tags)
 			{
 				task.tags = [];
-				elList = elTask.m_elTags.tags;
-				for (var i = 0; i < elList.length; i++)
+				let elList = elTask.m_elTags.tags;
+				for (let i = 0; i < elList.length; i++)
 					if (elList[i].m_selected)
 					{
-						var tag = elList[i].m_item;
+						let tag = elList[i].m_item;
 						task.tags.push(tag);
 					}
 			}
@@ -1328,11 +1374,11 @@ Status.prototype.editSave = function(i_args) {
 			if (elTask.m_elArtists && elTask.m_elArtists.artists)
 			{
 				task.artists = [];
-				elList = elTask.m_elArtists.artists;
-				for (var i = 0; i < elList.length; i++)
+				let elList = elTask.m_elArtists.artists;
+				for (let i = 0; i < elList.length; i++)
 					if (elList[i].m_selected)
 					{
-						var artist = elList[i].m_item;
+						let artist = elList[i].m_item;
 						task.artists.push(artist);
 					}
 			}
@@ -1381,13 +1427,13 @@ Status.prototype.editSave = function(i_args) {
 			if (statuses[i].obj.artists == null)
 				statuses[i].obj.artists = [];
 
-			for (var a = 0; a < statuses[i].obj.artists.length;)
+			for (let a = 0; a < statuses[i].obj.artists.length;)
 				if (artists[statuses[i].obj.artists[a]] == null)
 					statuses[i].obj.artists.splice(a, 1);
 				else
 					a++;
 
-			for (var id in artists)
+			for (let id in artists)
 				if ((artists[id] == 'selected') && (statuses[i].obj.artists.indexOf(id) == -1))
 					statuses[i].obj.artists.push(id);
 		}
@@ -1397,26 +1443,26 @@ Status.prototype.editSave = function(i_args) {
 			if (statuses[i].obj.flags == null)
 				statuses[i].obj.flags = [];
 
-			for (var a = 0; a < statuses[i].obj.flags.length;)
+			for (let a = 0; a < statuses[i].obj.flags.length;)
 				if (flags[statuses[i].obj.flags[a]] == null)
 					statuses[i].obj.flags.splice(a, 1);
 				else
 					a++;
 
 			// Store existing flags to check was it ON before:
-			var _flags = [];
-			for (var a = 0; a < statuses[i].obj.flags.length; a++)
+			let _flags = [];
+			for (let a = 0; a < statuses[i].obj.flags.length; a++)
 				_flags.push(statuses[i].obj.flags[a]);
 
-			for (var id in flags)
+			for (let id in flags)
 				if ((flags[id] == 'selected') && (_flags.indexOf(id) == -1))
 				{
 					if (RULES.flags[id])
 					{
 						// Flag can limit minimum and maximum progress percentage:
-						var p_min = RULES.flags[id].p_min;
-						var p_max = RULES.flags[id].p_max;
-						var progress = statuses[i].obj.progress;
+						let p_min = RULES.flags[id].p_min;
+						let p_max = RULES.flags[id].p_max;
+						let progress = statuses[i].obj.progress;
 
 						if (p_min && ((progress == null) || (progress < p_min)))
 							progress = p_min;
@@ -1447,13 +1493,13 @@ Status.prototype.editSave = function(i_args) {
 			if (statuses[i].obj.tags == null)
 				statuses[i].obj.tags = [];
 
-			for (var a = 0; a < statuses[i].obj.tags.length;)
+			for (let a = 0; a < statuses[i].obj.tags.length;)
 				if (tags[statuses[i].obj.tags[a]] == null)
 					statuses[i].obj.tags.splice(a, 1);
 				else
 					a++;
 
-			for (var id in tags)
+			for (let id in tags)
 				if ((tags[id] == 'selected') && (statuses[i].obj.tags.indexOf(id) == -1))
 					statuses[i].obj.tags.push(id);
 		}
@@ -1484,7 +1530,7 @@ Status.prototype.editSave = function(i_args) {
 					}
 				}
 
-				// Add artist to status:
+				/*/ Add artist to status:
 				if (tasks[t].artists && tasks[t].artists.length)
 				{
 					if (statuses[i].obj.artists == null)
@@ -1497,7 +1543,7 @@ Status.prototype.editSave = function(i_args) {
 						if (statuses[i].obj.artists.indexOf(artist) == -1)
 							statuses[i].obj.artists.push(artist);
 					}
-				}
+				}*/
 			}
 
 			statuses[i].obj.tasks = tasks;
@@ -1533,12 +1579,21 @@ Status.prototype.save = function() {
 	st_Save(this.obj, this.path);
 };
 
+function st_FilterStatusForSave(i_status)
+{
+	delete i_status.error;
+	if (i_status.body)
+		delete i_status.body.data;
+}
+
 function st_Save(i_status, i_path, i_func, i_args, i_navig_params_update)
 {
 	if (i_status == null)
 		i_status = RULES.status;
 	if (i_path == null)
 		i_path = g_CurPath();
+
+	st_FilterStatusForSave(i_status);
 
 	g_FolderSetStatusPath(i_status, i_path, i_navig_params_update);
 	n_walks[i_path] = null;
@@ -1547,7 +1602,6 @@ function st_Save(i_status, i_path, i_func, i_args, i_navig_params_update)
 	obj.object = {"status": i_status};
 	obj.add = true;
 	obj.file = c_GetRuFilePath('status.json', i_path);
-
 	n_Request(
 		{"send": {"editobj": obj}, "func": i_func, "args": i_args, "wait": false, 'info': 'status save'});
 }

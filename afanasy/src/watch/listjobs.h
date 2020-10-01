@@ -12,12 +12,12 @@ class ListJobs : public ListNodes
 	Q_OBJECT
 
 public:
-	ListJobs( QWidget* parent);
+	ListJobs(QWidget * i_parent, bool i_listwork = false, const std::string & i_name = "jobs");
 	~ListJobs();
 
 	bool v_caseMessage( af::Msg * msg);
 
-	ItemNode* v_createNewItem( af::Node * i_node, bool i_subscibed);
+	ItemNode* v_createNewItemNode(af::Node * i_afnode, Item::EType i_type, bool i_notify);
 
 	virtual bool v_processEvents( const af::MonitorEvents & i_me);
 
@@ -28,9 +28,7 @@ protected:
 
 	void v_showFunc();
 
-	void doubleClicked( Item * item);
-
-//	void v_connectionLost();
+	void v_doubleClicked(Item * i_item);
 
 	void v_resetSorting();
 
@@ -41,23 +39,12 @@ private slots:
 	void actMoveBottom();
 
 	void actSetUser();
-	void actHostsMask();
-	void actHostsMaskExclude();
-	void actMaxRunningTasks();
-	void actMaxRunTasksPerHost();
-	void actDependMask();
-	void actDependMaskGlobal();
-	void actWaitTime();
-	void actNeedOS();
-	void actNeedProperties();
+	void actChangeBranch();
 	void actPostCommand();
-	void actLifeTime();
 	void actSetHidden();
 	void actUnsetHidden();
 	void actPreviewApproval();
 	void actNoPreviewApproval();
-
-	void blockAction( int id_block, QString i_action);
 
 	void actStart();
 	void actStop();
@@ -68,6 +55,7 @@ private slots:
 	void actRestartSkipped();
 	void actRestartDone();
 	void actResetErrorHosts();
+	void actResetTryingNextTasks();
 	void actPause();
 	void actRestartPause();
 	void actDelete();
@@ -81,6 +69,12 @@ private slots:
 	void actBrowseFolder( QString i_folder);
 	void actOpenRULES();
 
+	// Needed to store where a menu for all blocks manipulation opened
+	void slot_BlocksMenuForAll();
+	void slot_BlocksMenuNotAll();
+
+	void slot_BlockAction(int i_bum, QString i_json);
+
 private:
 
 	void moveJobs( const std::string & i_operation);
@@ -90,6 +84,8 @@ private:
 	void calcTotals();
 
 private:
+	const bool m_listwork;
+
 	// Sorting filtering settings ordinary user:
 	static int     ms_SortType1;
 	static int     ms_SortType2;
@@ -109,4 +105,9 @@ private:
 	static bool    ms_FilterInclude_SU;
 	static bool    ms_FilterMatch_SU;
 	static std::string ms_FilterString_SU;
+
+	static uint32_t ms_hide_flags;
+
+	// Needed to store where a menu for all blocks manipulation opened
+	bool m_all_blocks_menu_shown;
 };

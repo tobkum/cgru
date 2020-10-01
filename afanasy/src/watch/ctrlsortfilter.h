@@ -29,6 +29,7 @@ public:
 	void init();
 
 	inline bool isSortEnabled()     const { return  (*m_sorttype1 != TNONE ) || (*m_sorttype2 != TNONE );}
+	inline bool isSortDisabled()    const { return  (*m_sorttype1 == TNONE ) && (*m_sorttype2 == TNONE );}
 	inline int  getSortType1()      const { return   *m_sorttype1;       }
 	inline int  getSortType2()      const { return   *m_sorttype2;       }
 	inline bool isSortAscending1()  const { return   *m_sortascending1;  }
@@ -92,7 +93,7 @@ private slots:
 	void actSortAscending2();
 	void actFilter( const QString & i_str);
 	void actFilterInclude();
-	void actFilterMacth();
+	void actFilterMatch();
 	void actFilterType( int i_type);
 
 private:

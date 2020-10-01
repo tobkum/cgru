@@ -41,6 +41,22 @@
 #include "../include/macrooutput.h"
 #include "../libafanasy/logger.h"
 
+const std::string af::pathBase(const std::string & i_path)
+{
+	if (i_path.size() == 0)
+		return i_path;
+
+	std::string::size_type slash_pos = i_path.rfind("/");
+	if (slash_pos == std::string::npos)
+		slash_pos = i_path.rfind("\\");
+	if (slash_pos == std::string::npos)
+		return i_path;
+
+	std::string base = i_path.substr(slash_pos+1);
+
+	return base;
+}
+
 void af::pathFilter( std::string & path)
 {
 	if( path.size() <= 2 ) return;
@@ -107,11 +123,13 @@ const std::string af::pathUp(const std::string & i_path, bool i_use_cwd)
 			return "\\";
 	}
 
-	// Remove slash from the end if exists
-	if (up_path.back() == '/')
-		up_path.pop_back();
-	if (up_path.back() == '\\')
-		up_path.pop_back();
+	// Remove slashes from the end if exist
+	while (up_path.size() && ((up_path[up_path.size()-1] == '/') || (up_path[up_path.size()-1] == '\\')))
+		up_path = up_path.substr(0, up_path.size()-1);
+
+	// Null path is considered as root
+	if (up_path.size() == 0)
+		return "/";
 
 	// It is can be link to the current folder
 	if (up_path == ".")

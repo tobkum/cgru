@@ -140,7 +140,7 @@ class BlockParameters:
         self.framespertask = 1
         self.framesequential = 1
         self.skipexisting = 0
-        self.maxhosts = -1
+        self.maxruntasks = -1
         self.capacity = -1
         self.maxperhost = -1
         self.maxruntime = -1
@@ -150,6 +150,8 @@ class BlockParameters:
         self.tmpimage = 1
         self.pathsmap = 1
         self.imgfiles = []
+        self.tickets_use = 0
+        self.tickets_data = None
 
         # Just to add to the final job name some info, for example timecode
         self.jobname_suffix = ''
@@ -161,7 +163,7 @@ class BlockParameters:
             self.framespertask = int(afnode.knob('framespertask').value())
             self.framesequential = int(afnode.knob('framesequential').value())
             self.skipexisting = int(afnode.knob('skipexisting').value())
-            self.maxhosts = int(afnode.knob('maxhosts').value())
+            self.maxruntasks = int(afnode.knob('maxruntasks').value())
             self.capacity = int(afnode.knob('capacity').value())
             self.maxperhost = int(afnode.knob('maxperhost').value())
             self.maxruntime = int(afnode.knob('maxruntime').value())
@@ -169,6 +171,8 @@ class BlockParameters:
             self.pathsmap = int(afnode.knob('pathsmap').value())
             self.hostsmask = afnode.knob('hostsmask').value()
             self.hostsmaskexclude = afnode.knob('hostsmaskexcl').value()
+            self.tickets_use = int(afnode.knob('tickets_use').value())
+            self.tickets_data = afnode.knob('tickets_data').value()
 
             if int(afnode.knob('timecode_use').value()):
                 timecode = afnode.knob('timecode').value()
@@ -332,7 +336,7 @@ class BlockParameters:
         else:
             self.dependmask = self.dependmask + '|' + mask
 
-    def genBlock(self, scenename):
+    def genBlock(self, i_scene_path):
         if VERBOSE == 2:
             print('Generating block "%s"' % self.name)
 
@@ -352,6 +356,13 @@ class BlockParameters:
                 block.setCapacity(self.capacity)
             if self.maxruntime != -1:
                 block.setTasksMaxRunTime(self.maxruntime)
+            if self.tickets_use and self.tickets_data is not None and len(self.tickets_data):
+                for ticket in self.tickets_data.split(','):
+                    ticket = ticket.strip().split(':')
+                    if len(ticket) != 2:
+                        nuke.message('Invalid ticket data: "%s".' % ticket)
+                        continue
+                    block.addTicket(ticket[0], int(ticket[1]))
 
             cmd = os.getenv('NUKE_AF_RENDER', 'nuke -i')
             if self.tmpimage or self.pathsmap:
@@ -378,7 +389,7 @@ class BlockParameters:
                         cmd += ' --nopathsmap'
 
             cmd += ' -X %s -F@#@-@#@x%d -x \"%s\"' % \
-                   (self.writename, self.frameinc, scenename)
+                   (self.writename, self.frameinc, i_scene_path)
 
             block.setCommand(cmd)
 
@@ -410,8 +421,8 @@ class BlockParameters:
             block.setTasksDependMask(self.tasksdependmask)
 
         if self.subblock:
-            if self.maxhosts != -1:
-                block.setMaxHosts(self.maxhosts)
+            if self.maxruntasks != -1:
+                block.setMaxRunningTasks(self.maxruntasks)
             if self.maxperhost != -1:
                 block.setMaxRunTasksPerHost(self.maxperhost)
             if self.hostsmask is not None:
@@ -539,7 +550,7 @@ class JobParameters:
             print('Initializing job parameters: "%s"' % nodename)
 
         self.startpaused = 0
-        self.maxhosts = -1
+        self.maxruntasks = -1
         self.maxperhost = -1
         self.priority = -1
         self.platform = None
@@ -548,11 +559,15 @@ class JobParameters:
         self.dependmask = None
         self.dependmaskglobal = None
         self.nodename = None
+        self.tmpscene = 1
         self.tmpimage = 1
         self.pathsmap = 1
+        self.pools_use = 0
+        self.pools_data = None
+
         if afnode is not None:
             self.startpaused = int(afnode.knob('startpaused').value())
-            self.maxhosts = int(afnode.knob('maxhosts').value())
+            self.maxruntasks = int(afnode.knob('maxruntasks').value())
             self.maxperhost = int(afnode.knob('maxperhost').value())
             self.priority = int(afnode.knob('priority').value())
             self.platform = afnode.knob('platform').value()
@@ -561,8 +576,11 @@ class JobParameters:
             self.dependmask = afnode.knob('dependmask').value()
             self.dependmaskglobal = afnode.knob('dependmaskglbl').value()
             self.nodename = afnode.name()
+            self.tmpscene = int(afnode.knob('tmpscene').value())
             self.tmpimage = int(afnode.knob('tmpimage').value())
             self.pathsmap = int(afnode.knob('pathsmap').value())
+            self.pools_use = int(afnode.knob('pools_use').value())
+            self.pools_data = afnode.knob('pools_data').value()
 
         self.blocksparameters = []
 
@@ -596,7 +614,7 @@ class JobParameters:
         else:
             self.dependmask = self.dependmask + '|' + mask
 
-    def genJob(self, renderscenename):
+    def genJob(self, i_scene_path):
         if VERBOSE == 2:
             print('Generating job on: "%s"' % self.nodename)
 
@@ -615,14 +633,17 @@ class JobParameters:
             return
 
         afcommon = __import__('afcommon', globals(), locals(), [])
-        self.scenename = \
-            renderscenename + afcommon.filterFileName('.%s.nk' % self.jobname)
+        if self.tmpscene:
+            # Add job name to temporary scene file
+            self.scene_path = i_scene_path + afcommon.filterFileName('.%s.nk' % self.jobname)
+        else:
+            self.scene_path = i_scene_path
 
         jobname = str(self.jobname)
 
         blocks = []
         for bparams in self.blocksparameters:
-            block = bparams.genBlock(self.scenename)
+            block = bparams.genBlock(self.scene_path)
             if block is None:
                 if VERBOSE:
                     print('Block generation error on "%s" - "%s"' %
@@ -639,8 +660,8 @@ class JobParameters:
         job = af.Job( jobname)
         if self.priority != -1:
             job.setPriority(self.priority)
-        if self.maxhosts != -1:
-            job.setMaxHosts(self.maxhosts)
+        if self.maxruntasks != -1:
+            job.setMaxRunningTasks(self.maxruntasks)
         if self.maxperhost != -1:
             job.setMaxRunTasksPerHost(self.maxperhost)
         if self.hostsmask is not None:
@@ -659,13 +680,23 @@ class JobParameters:
             self.dependmaskglobal = str(self.dependmaskglobal)
             if self.dependmaskglobal != '':
                 job.setDependMaskGlobal(self.dependmaskglobal)
+
+        if self.pools_use and self.pools_data is not None and len(self.pools_data):
+            pools = dict()
+            for pool in self.pools_data.split(','):
+                pool = pool.split(':')
+                if len(pool) != 2:
+                    continue
+                pools[pool[0]] = int(pool[1])
+            job.setPools(pools)
+
         if self.startpaused:
             job.offline()
         if self.platform is None or self.platform == 'Any':
             job.setAnyOS()
         else:
             job.setNativeOS()
-        job.setCmdPost('deletefiles "%s"' % self.scenename)
+        job.setCmdPost('deletefiles "%s"' % self.scene_path)
 
         job.blocks = blocks
 
@@ -782,14 +813,14 @@ def renderNodes(nodes, fparams, storeframes):
     global af
     af = __import__('af', globals(), locals(), [])
 
-    scenepath = nuke.root().name()
-    if scenepath == 'Root':
-        scenepath = os.getenv('NUKE_AF_TMPSCENE', 'tmp')
-    scenepath = os.path.abspath(scenepath)
-    scenename = os.path.basename(scenepath)
+    scene_path = nuke.root().name()
+    if scene_path == 'Root':
+        scene_path = os.getenv('NUKE_AF_TMPSCENE', 'tmp')
+    scene_path = os.path.abspath(scene_path)
+    scene_name = os.path.basename(scene_path)
     ftime = time.time()
     tmp_suffix = time.strftime('.%m%d-%H%M%S-') + str(ftime - int(ftime))[2:5]
-    renderscenename = scenepath + tmp_suffix
+    tmp_scene_path = scene_path + tmp_suffix
 
     jobsparameters = []
     for node in nodes:
@@ -800,7 +831,7 @@ def renderNodes(nodes, fparams, storeframes):
             for key in fparams:
                 oldparams[key] = node.knob(key).value()
                 node.knob(key).setValue(fparams[key])
-            newjobparameters = getJobsParameters(node, scenename, dict())
+            newjobparameters = getJobsParameters(node, scene_name, dict())
             if newjobparameters is None:
                 return
             if not storeframes:
@@ -813,7 +844,7 @@ def renderNodes(nodes, fparams, storeframes):
             if not bparams.valid:
                 return
             blocksparameters.append(bparams)
-            jobparams = JobParameters(None, scenename, blocksparameters,
+            jobparams = JobParameters(None, scene_name, blocksparameters,
                                       fparams)
             if not jobparams.valid:
                 return
@@ -830,7 +861,10 @@ def renderNodes(nodes, fparams, storeframes):
 
     jobs = []
     for jobparams in jobsparameters:
-        job = jobparams.genJob(renderscenename)
+        if jobparams.tmpscene:
+            job = jobparams.genJob(tmp_scene_path)
+        else:
+            job = jobparams.genJob(scene_path)
         if job is None:
             if VERBOSE:
                 print('Job generatiton error on "%s"' % jobparams.nodename)
@@ -844,26 +878,37 @@ def renderNodes(nodes, fparams, storeframes):
     cgrupathmap = __import__('cgrupathmap', globals(), locals(), [])
     pm = cgrupathmap.PathMap(UnixSeparators=True, Verbose=False)
 
+    # Store scene modified state
     changed = nuke.modified()
+
+    # Save all generated jobs scenes
     for i in range(len(jobs)):
-        scenename = jobsparameters[i].scenename
-        if jobsparameters[i].pathsmap and pm.initialized:
-            pm_scenename = scenename + '.pm'
-            nuke.scriptSave(pm_scenename)
+        scene_path = jobsparameters[i].scene_path
+
+        # Apply paths mapping if enables and rendering to temporary scene
+        if jobsparameters[i].pathsmap and pm.initialized and jobsparameters[i].tmpscene:
+            pm_scene_path = scene_path + '.pm'
+            nuke.scriptSave(pm_scene_path)
             pm.toServerFile(
-                pm_scenename,
-                scenename,
+                pm_scene_path,
+                scene_path,
                 SearchStrings=['file ', 'font ', 'project_directory '],
                 Verbose=False
             )
-            os.remove(pm_scenename)
+            os.remove(pm_scene_path)
         else:
-            nuke.scriptSave(scenename)
+            nuke.scriptSave(scene_path)
+
+        # Send job to server
         if not jobs[i].send()[0]:
             nuke.message('Unable to send job to server.')
-            os.remove(scenename)
+            os.remove(scene_path)
             break
+
+        # This is needed if ocassionaly user sending to render thousands of nodes
         time.sleep(0.1)
+
+    # Restore scene modified state
     nuke.modified(changed)
 
 

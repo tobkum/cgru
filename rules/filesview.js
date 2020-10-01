@@ -22,9 +22,6 @@ var fv_thumbnails_tomake_files = [];
 var fv_cur_item = null;
 var fv_first_created = false;
 
-if (localStorage.filesview == null)
-	localStorage.filesview = '0';
-
 function fv_Finish()
 {
 	fv_views = [];
@@ -59,6 +56,9 @@ function FilesView(i_args)
 	this.walk = i_args.walk;
 	this.masks = i_args.masks;
 	this.count_images = i_args.count_images;
+	this.name = i_args.name;
+	if (this.name == null)
+		this.name = 'files';
 
 	this.can_refresh = !(i_args.can_refresh === false);
 	this.can_count = i_args.can_count;
@@ -80,7 +80,7 @@ function FilesView(i_args)
 	else if (localStorage.background && localStorage.background.length)
 		this.elRoot.style.background = localStorage.background;
 	else
-		this.elRoot.style.backgroundColor = u_backgroundColor;
+		this.elRoot.style.background = u_background;
 
 	this.elPanel = document.createElement('div');
 	this.elRoot.appendChild(this.elPanel);
@@ -300,8 +300,18 @@ FilesView.prototype.destroy = function() {
 	this.elParent.removeChild(this.elRoot);
 };
 
+FilesView.prototype.getLocalStorageName = function(i_attr_name) {
+	return 'filesview_' + this.name + '_' + i_attr_name;
+};
+FilesView.prototype.getLocalStorageAttr = function(i_attr_name) {
+	return localStorage[this.getLocalStorageName(i_attr_name)];
+};
+FilesView.prototype.setLocalStorageAttr = function(i_attr_name, i_attr_value) {
+	localStorage[this.getLocalStorageName(i_attr_name)] = '' + i_attr_value;
+};
+
 FilesView.prototype.limitsAdd = function() {
-	var limits = [3, 10, 30, 0];
+	var limits = [1, 3, 10, 30, 0];
 
 	this.elLimits = [];
 
@@ -326,8 +336,9 @@ FilesView.prototype.limitsAdd = function() {
 		elLimit.m_limit = limits[i];
 		elLimit.m_view = this;
 		elLimit.onclick = function(e) {
-			localStorage.filesview = '' + e.currentTarget.m_limit;
-			e.currentTarget.m_view.limitApply();
+			var fv = e.currentTarget.m_view;
+			fv.setLocalStorageAttr('limit', e.currentTarget.m_limit);
+			fv.limitApply();
 		}
 	}
 };
@@ -340,7 +351,7 @@ FilesView.prototype.limitApply = function() {
 	for (var j = 0; j < this.elLimits.length; j++)
 	{
 		var el = this.elLimits[j];
-		if (parseInt(localStorage.filesview) == el.m_limit)
+		if (parseInt(this.getLocalStorageAttr('limit')) === el.m_limit)
 		{
 			limit = el.m_limit;
 			if (limit)
@@ -493,7 +504,9 @@ FilesView.prototype.showAttrs = function(i_el, i_obj) {
 	if (i_obj)
 		i_el.m_obj = i_obj;
 
-	if (this.masks && this.masks.length)
+	// Highlight valid/error objects by given masks.
+	// Skip aux folders that starting with '_'.
+	if ((c_PathBase(i_el.m_path).charAt(0) != '_') && this.masks && this.masks.length)
 		for (var i = 0; i < this.masks.length; i++)
 			if (this.masks[i].re.test(c_PathBase(i_el.m_path)))
 			{
@@ -577,7 +590,9 @@ FilesView.prototype.showAttrs = function(i_el, i_obj) {
 			title += '\nFiles: ' + i_el.m_obj.num_files_total;
 		}
 
-		if (RULES.status && (RULES.status.frames_num != null))
+		// Highlight correct/error files number if it defined in status.
+		// Skip aux folders that starting with '_'.
+		if ((c_PathBase(i_el.m_path).charAt(0) != '_') && RULES.status && (RULES.status.frames_num != null))
 		{
 			i_el.m_el_num_files.classList.add('correct');
 			if (f_count != RULES.status.frames_num)
@@ -618,13 +633,13 @@ FilesView.prototype.showAttrs = function(i_el, i_obj) {
 	var video = i_el.m_obj.video;
 	if (video)
 	{
-		if (i_el.m_el_videoinfo == null)
+		if (i_el.m_el_mediainfo == null)
 		{
-			i_el.m_el_videoinfo = document.createElement('div');
-			i_el.m_elBody.appendChild(i_el.m_el_videoinfo);
-			i_el.m_el_videoinfo.classList.add('videoinfo');
+			i_el.m_el_mediainfo = document.createElement('div');
+			i_el.m_elBody.appendChild(i_el.m_el_mediainfo);
+			i_el.m_el_mediainfo.classList.add('mediainfo');
 		}
-		var info = 'Video:';
+		var info = '';
 		if (video.width && video.height)
 			info += ' ' + video.width + 'x' + video.height;
 		if (video.frame_count && video.fps)
@@ -641,7 +656,28 @@ FilesView.prototype.showAttrs = function(i_el, i_obj) {
 			info += '/' + video.bitdepth;
 		if (video.frame_count)
 			info += ' ' + video.frame_count + 'f';
-		i_el.m_el_videoinfo.textContent = info;
+		i_el.m_el_mediainfo.textContent = info;
+	}
+
+	var exif = i_el.m_obj.exif;
+	if (exif)
+	{
+		if (i_el.m_el_mediainfo == null)
+		{
+			i_el.m_el_mediainfo = document.createElement('div');
+			i_el.m_elBody.appendChild(i_el.m_el_mediainfo);
+			i_el.m_el_mediainfo.classList.add('mediainfo');
+		}
+		var info = '';
+		if (exif.width && exif.height) info += ' ' + exif.width + 'x' + exif.height;
+		//if (exif.bitdepth) info += ' ' + exif.bitdepth;
+		//if (exif.colortype) info += ' ' + exif.colortype;
+		//if (exif.compression) info += ' ' + exif.compression;
+		if (exif.artist)
+			info += ' ' + exif.artist;
+		if (exif.comments)
+			info += ' ' + exif.comments;
+		i_el.m_el_mediainfo.textContent = info;
 	}
 
 	if (i_el.m_obj.annotation)
@@ -708,10 +744,6 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 	}
 	elItem.classList.add(type);
 
-	// Drag&Drop:
-	elItem.draggable = 'true';
-	elItem.ondragstart = function(e) { c_FileDragStart(e, e.currentTarget.m_path); };
-
 	// Anchor Icon:
 	var elAnchor = null;
 	if (i_isFolder)
@@ -733,9 +765,6 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 			elAnchor.textContent = '@';
 	}
 	elAnchor.href = g_GetLocationArgs({"fv_Goto": path});
-	//	elAnchor.m_path = path;
-	//	elAnchor.draggable = 'true';
-	//	elAnchor.ondragstart = function(e){ c_FileDragStart( e, e.currentTarget.m_path);}
 
 	// Thumbnail:
 	if (this.has_thumbs)
@@ -746,6 +775,7 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 	elItem.appendChild(elBody);
 	elItem.m_elBody = elBody;
 
+	// Name (Link)
 	elItem.m_elName = document.createElement('a');
 	elBody.appendChild(elItem.m_elName);
 	elItem.m_elName.classList.add('name');
@@ -757,6 +787,10 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 		elItem.m_elName.href = RULES.root + path;
 		elItem.m_elName.target = '_blank';
 	}
+	// Drag&Drop:
+	elItem.m_elName.m_path = path;
+	elItem.m_elName.draggable = 'true';
+	elItem.m_elName.ondragstart = function(e){ c_FileDragStart( e, e.currentTarget.m_path);}
 
 	// Menu show/hide button:
 	var el = document.createElement('div');
@@ -885,7 +919,7 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 	}
 
 	// Folder play sequence button:
-	if (i_isFolder && RULES.has_filesystem !== false)
+	if (i_isFolder && c_HasFileSystem())
 	{
 		var cmds = RULES.cmdexec.play_sequence;
 		if (cmds)
@@ -905,13 +939,10 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 	}
 
 	// Folder dailies button:
-	if (i_isFolder && (RULES.afanasy_enabled !== false) && ASSET && ASSET.subfolders_dailies_hide &&
-		(ASSET.path == g_CurPath()))
+	if (i_isFolder && (RULES.afanasy_enabled !== false) && ASSET &&
+		((ASSET.subfolders_dailies_hide && (ASSET.path == g_CurPath())) ||
+		 (ASSET.subfolders_dailies_hide == false)))
 	{
-		var out_path = c_PathDir(path);
-		if (ASSET && (ASSET.dailies))
-			out_path = ASSET.path + '/' + ASSET.dailies.path[0];
-
 		var el = document.createElement('div');
 		elBody.appendChild(el);
 		el.classList.add('button');
@@ -920,7 +951,7 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 		el.m_path = path;
 		el.onclick = function(e) {
 			e.stopPropagation();
-			d_Make(e.currentTarget.m_path, out_path)
+			d_Make(e.currentTarget.m_path);
 		};
 	}
 
@@ -940,7 +971,7 @@ FilesView.prototype.showItem = function(i_obj, i_isFolder) {
 	if (c_FileIsMovie(i_obj.name))
 	{
 		var cmds = RULES.cmdexec.play_movie;
-		if (cmds && (RULES.has_filesystem !== false))
+		if (cmds && c_HasFileSystem())
 			for (var c = 0; c < cmds.length; c++)
 			{
 				var cmd = cmds[c].cmd;
@@ -1081,7 +1112,7 @@ FilesView.prototype.getSelected = function() {
 
 FilesView.prototype.countFiles = function(i_path, i_args) {
 	c_LoadingElSet(this.elRoot);
-	var cmd = 'rules/bin/walk.sh "' + RULES.root + i_path + '"';
+	var cmd = 'rules/bin/walk.sh --mediainfo --upparents 1 "' + RULES.root + i_path + '"';
 	n_Request({
 		"send": {"cmdexec": {"cmds": [cmd]}},
 		"func": this.countFilesFinished,
@@ -1092,11 +1123,7 @@ FilesView.prototype.countFiles = function(i_path, i_args) {
 };
 
 FilesView.prototype.countFilesFinished = function(i_data, i_args) {
-	i_args.this.countFilesUpdate(i_data, i_args);
-};
-
-FilesView.prototype.countFilesUpdate = function(i_data, i_args) {
-	c_LoadingElReset(this.elRoot);
+	c_LoadingElReset(i_args.this.elRoot);
 
 	if (i_data.error)
 		c_Error(i_data.error);
@@ -1107,12 +1134,7 @@ FilesView.prototype.countFilesUpdate = function(i_data, i_args) {
 		return;
 	}
 
-	var data = i_data.cmdexec[0].walk;
-
-	for (key in data)
-		if (key != 'walk')
-			if (key.indexOf('error') != -1)
-				c_Error('Walk[' + key + ']: ' + data[key]);
+	let data = i_data.cmdexec[0].walk;
 
 	if (data.error)
 	{
@@ -1126,35 +1148,41 @@ FilesView.prototype.countFilesUpdate = function(i_data, i_args) {
 		return;
 	}
 
+	i_args.this.updateFromWalk(data, i_args.wpath);
+
+	if (i_args.post_args && i_args.post_args.func)
+		i_args.post_args.func(i_args.post_args, data.walk);
+};
+
+FilesView.prototype.updateFromWalk = function(i_data, i_path) {
+	//console.log(i_path);
+	//console.log(JSON.stringify(i_data));
 	// Update folder item attrs:
 	for (var i = 0; i < this.elItems.length; i++)
 	{
-		if (this.elItems[i].m_path != i_args.wpath)
+		if (this.elItems[i].m_path != i_path)
 			continue;
 
-		this.showAttrs(this.elItems[i], data.walk);
+		this.showAttrs(this.elItems[i], i_data.walk);
 
 		break;
 	}
 
 	// Update this class instance walk object,
 	// as it can be shown next time from cache:
-	var name = c_PathBase(i_args.wpath);
+	var name = c_PathBase(i_path);
 	for (var i = 0; i < this.walk.folders.length; i++)
 	{
 		if (this.walk.folders[i].name != name)
 			continue;
 
-		for (var key in data.walk)
-			this.walk.folders[i][key] = data.walk[key]
+		for (var key in i_data.walk)
+			this.walk.folders[i][key] = i_data.walk[key]
 
-										break;
+		break;
 	}
 
 	this.showCounts();
-
-	if (i_args.post_args && i_args.post_args.func)
-		i_args.post_args.func(i_args.post_args, data.walk);
 };
 
 FilesView.prototype.put = function() {
@@ -1788,42 +1816,47 @@ function fv_SkipFile(i_filename)
 
 function fv_ReloadAll()
 {
-	for (var i = 0; i < fv_views.length; i++)
+	for (let i = 0; i < fv_views.length; i++)
 		fv_views[i].refresh();
 }
 function fv_refreshAttrs()
 {
-	for (var i = 0; i < fv_views.length; i++)
+	for (let i = 0; i < fv_views.length; i++)
 		fv_views[i].refreshAttrs();
 }
 function fv_SelectNone()
 {
-	for (var v = 0; v < fv_views.length; v++)
+	for (let v = 0; v < fv_views.length; v++)
 		fv_views[v].selectNone();
 }
 function fv_BufferAdded()
 {
-	for (var v = 0; v < fv_views.length; v++)
+	for (let v = 0; v < fv_views.length; v++)
 		fv_views[v].bufferAdded();
 }
 function fv_BufferEmpty()
 {
-	for (var v = 0; v < fv_views.length; v++)
+	for (let v = 0; v < fv_views.length; v++)
 		fv_views[v].bufferEmpty();
 }
 function fv_RefreshPath(i_path)
 {
 	// console.log('fv_RefreshPath: ' + i_path);
-	for (var i = 0; i < fv_views.length; i++)
+	for (let i = 0; i < fv_views.length; i++)
 		if (fv_views[i].path == i_path)
 			fv_views[i].refresh();
+}
+function fv_UpdateFromWalk(i_data, i_path)
+{
+	for (let i = 0; i < fv_views.length; i++)
+		fv_views[i].updateFromWalk(i_data, i_path);
 }
 function fv_Goto(i_path)
 {
 	fv_SelectNone();
-	for (var v = 0; v < fv_views.length; v++)
+	for (let v = 0; v < fv_views.length; v++)
 	{
-		var el = fv_views[v].getItemPath(i_path);
+		let el = fv_views[v].getItemPath(i_path);
 		if (el)
 		{
 			fv_views[v].selectItem(el);

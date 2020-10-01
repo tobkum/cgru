@@ -41,7 +41,7 @@
 #include "../libafanasy/logger.h"
 
 ListTasks::ListTasks( QWidget* parent, int JobId, const QString & JobName):
-	ListItems( parent),
+	ListItems( parent, "tasks"),
 	m_job_id( JobId),
 	m_job_name( JobName),
 	m_blocks_num(0),
@@ -50,7 +50,7 @@ ListTasks::ListTasks( QWidget* parent, int JobId, const QString & JobName):
 	m_tasks( NULL),
 	constructed( false)
 {
-	init();
+	initListItems();
 
 	m_view->setSpacing( 1);
 //   view->setUniformItemSizes( true);
@@ -112,7 +112,7 @@ ListTasks::~ListTasks()
 	delete [] m_blocks;
 	delete [] m_tasks;
 
-	Watch::watchJodTasksWindowRem( m_job_id);
+	Watch::watchJobTasksWindowRem( m_job_id);
 }
 
 void ListTasks::v_connectionLost()
@@ -131,47 +131,47 @@ void ListTasks::contextMenuEvent(QContextMenuEvent *event)
 	menu.exec(event->globalPos());
 }
 
-void ListTasks::generateMenu(QMenu &o_menu, Item *item)
+void ListTasks::generateMenu(QMenu &o_menu, Item * i_item)
 {
 	QAction *action;
 
-	int id = item->getId();
-	switch( id)
+	switch (i_item->getType())
 	{
-		case ItemJobBlock::ItemId:
+		case Item::TBlock:
 		{
-			ItemJobBlock *itemBlock = static_cast<ItemJobBlock*>(item);
+			ItemJobBlock *itemBlock = static_cast<ItemJobBlock*>(i_item);
 			
-			if( itemBlock->files.size() )
+			if (itemBlock->hasFiles())
 			{
-				action = new QAction( "Browse Files...", this);
-				connect( action, SIGNAL( triggered() ), this, SLOT( actBrowseFolder() ));
-				o_menu.addAction( action);
+				action = new QAction("Browse Files...", this);
+				connect(action, SIGNAL(triggered()), this, SLOT(actBrowseFolder()));
+				o_menu.addAction(action);
 				
 				const std::vector<std::string> preview_cmds = af::Environment::getPreviewCmds();
-                if( preview_cmds.size())
+				std::vector<std::string> files = itemBlock->getFiles();
+                if (preview_cmds.size())
                 {
-                    QMenu * submenu_cmd = new QMenu( "Launch", this);
-                    for( int i = 0; i < itemBlock->files.size(); i++)
+                    QMenu * submenu_cmd = new QMenu("Launch", this);
+                    for (int i = 0; i < files.size(); i++)
                     {
-                        action = new QAction( afqt::stoq(itemBlock->files[i]).right(55), this);
-                        action->setEnabled( false);
+                        action = new QAction(afqt::stoq(files[i]).right(55), this);
+                        action->setEnabled(false);
                         QFont f = action->font();
                         f.setItalic(true);
                         action->setFont(f);
                         submenu_cmd->addAction( action);
-                        for( int p = 0; p < preview_cmds.size(); p++)
+                        for (int p = 0; p < preview_cmds.size(); p++)
                         {
                             QString cmd = afqt::stoq( preview_cmds[p]);
                             QStringList cmdSplit = cmd.split("|");
                                 
-                            ActionIdId * actionid = new ActionIdId( p, i, QString("    " + cmdSplit.first()), this);
-                            connect( actionid, SIGNAL( triggeredId(int,int) ), this, SLOT( actBlockPreview(int,int) ));
-                            submenu_cmd->addAction( actionid);
+                            ActionIdId * actionid = new ActionIdId(p, i, QString("    " + cmdSplit.first()), this);
+                            connect(actionid, SIGNAL(triggeredId(int,int)), this, SLOT(actBlockPreview(int,int)));
+                            submenu_cmd->addAction(actionid);
                         }
                         submenu_cmd->addSeparator();
                     }
-                    o_menu.addMenu( submenu_cmd);
+                    o_menu.addMenu(submenu_cmd);
                 }
                 o_menu.addSeparator();
 			}
@@ -179,7 +179,7 @@ void ListTasks::generateMenu(QMenu &o_menu, Item *item)
 			QMenu * submenu = new QMenu( "Change Block", this);
 
 			// Operations on the current block item
-			itemBlock->generateMenu( itemBlock->getNumBlock(), &o_menu, this, submenu);
+			itemBlock->getInfo()->generateMenu(&o_menu, submenu);
 
 			o_menu.addMenu( submenu);
 			
@@ -219,50 +219,70 @@ void ListTasks::generateMenu(QMenu &o_menu, Item *item)
 
 			break;
 		}
-		case ItemJobTask::ItemId:
+		case Item::TTask:
 		{
-			ItemJobTask *itemTask = static_cast<ItemJobTask*>(item);
+			ItemJobTask *itemTask = static_cast<ItemJobTask*>(i_item);
 
 			action = new QAction("Open Task", this);
-			connect( action, SIGNAL( triggered() ), this, SLOT( actTaskOpen() ));
-			o_menu.addAction( action);
+			connect(action, SIGNAL(triggered() ), this, SLOT(actTaskOpen()));
+			o_menu.addAction(action);
 
-			if( itemTask->hasFiles())
+			o_menu.addSeparator();
+
+			if (itemTask->hasFiles())
 			{
 				const std::vector<std::string> files = itemTask->getFiles();
 
 				o_menu.addSeparator();
 
-				action = new QAction( "Browse Files...", this);
-				connect( action, SIGNAL( triggered() ), this, SLOT( actBrowseFolder() ));
-				o_menu.addAction( action);
+				action = new QAction("Browse Files...", this);
+				connect(action, SIGNAL(triggered() ), this, SLOT(actBrowseFolder()));
+				o_menu.addAction(action);
 
 				const std::vector<std::string> preview_cmds = af::Environment::getPreviewCmds();
-				if( preview_cmds.size())
+				if (preview_cmds.size())
                 {
-                    QMenu * submenu_cmd = new QMenu( "Launch", this);
-                    for( int i = 0; i < files.size(); i++)
+                    QMenu * submenu_cmd = new QMenu("Launch", this);
+                    for (int i = 0; i < files.size(); i++)
                     {
-                        action = new QAction( afqt::stoq(files[i]).right(55), this);
-                        action->setEnabled( false);
+                        action = new QAction(afqt::stoq(files[i]).right(55), this);
+                        action->setEnabled(false);
                         QFont f = action->font();
                         f.setItalic(true);
                         action->setFont(f);
-                        submenu_cmd->addAction( action);
-                        for( int p = 0; p < preview_cmds.size(); p++)
+                        submenu_cmd->addAction(action);
+                        for (int p = 0; p < preview_cmds.size(); p++)
                         {
-                            QString cmd = afqt::stoq( preview_cmds[p]);
+                            QString cmd = afqt::stoq(preview_cmds[p]);
                             QStringList cmdSplit = cmd.split("|");
                                 
-                            ActionIdId * actionid = new ActionIdId( p, i, QString("    " + cmdSplit.first()), this);
-                            connect( actionid, SIGNAL( triggeredId(int,int) ), this, SLOT( actTaskPreview(int,int) ));
-                            submenu_cmd->addAction( actionid);
+                            ActionIdId * actionid = new ActionIdId(p, i, QString("    " + cmdSplit.first()), this);
+                            connect(actionid, SIGNAL(triggeredId(int,int) ), this, SLOT(actTaskPreview(int,int)));
+                            submenu_cmd->addAction(actionid);
                         }
                         submenu_cmd->addSeparator();
                     }
-                    o_menu.addMenu( submenu_cmd);
+                    o_menu.addMenu(submenu_cmd);
                 }
                 o_menu.addSeparator();
+			}
+
+			if ((itemTask->taskprogress.state & AFJOB::STATE_READY_MASK) &&
+				(false == (itemTask->taskprogress.state & AFJOB::STATE_TRYTHISTASKNEXT_MASK)))
+			{
+				action = new QAction("Try This Task Next", this);
+				connect(action, SIGNAL(triggered()), this, SLOT(actTaskTryNext()));
+				o_menu.addAction(action);
+
+				o_menu.addSeparator();
+			}
+			if (itemTask->taskprogress.state & AFJOB::STATE_TRYTHISTASKNEXT_MASK)
+			{
+				action = new QAction("Do Not Try Next", this);
+				connect(action, SIGNAL(triggered()), this, SLOT(actTaskDoNotTry()));
+				o_menu.addAction(action);
+
+				o_menu.addSeparator();
 			}
 
 			o_menu.addSeparator();
@@ -270,6 +290,13 @@ void ListTasks::generateMenu(QMenu &o_menu, Item *item)
 			action = new QAction( "Skip Tasks", this);
 			connect( action, SIGNAL( triggered() ), this, SLOT( actTasksSkip() ));
 			o_menu.addAction( action);
+
+			if (af::Environment::VISOR())
+			{
+				action = new QAction("Done Tasks", this);
+				connect(action, SIGNAL(triggered()), this, SLOT(actTasksDone()));
+				o_menu.addAction(action);
+			}
 
 			action = new QAction( "Restart Tasks", this);
 			connect( action, SIGNAL( triggered() ), this, SLOT( actTasksRestart() ));
@@ -279,7 +306,7 @@ void ListTasks::generateMenu(QMenu &o_menu, Item *item)
 		}
 		default:
 		{
-			AF_ERR << "ListTasks::contextMenuEvent: unknown item id = " << id;
+			AF_ERR << "ListTasks::contextMenuEvent: unknown item type = " << i_item->getType();
 		}
 	}
 }
@@ -492,14 +519,14 @@ bool ListTasks::updateTasks(
 	int lastChangedRow = -1;
 	for( int i = 0; i < i_tps.size(); i++)
 	{
-		if( i_blocks[i] > m_blocks_num)
+		if( i_blocks[i] >= m_blocks_num)
 		{
-			AFERRAR("ListTasks::updateTasks: block > m_blocks_num (%d>%d)", i_blocks[i], m_blocks_num)
+			AFERRAR("ListTasks::updateTasks: block >= m_blocks_num (%d>=%d)", i_blocks[i], m_blocks_num)
 			return false;
 		}
-		if( i_tasks[i] > m_tasks_num[i_blocks[i]])
+		if( i_tasks[i] >= m_tasks_num[i_blocks[i]])
 		{
-			AFERRAR("ListTasks::updateTasks: task > m_tasks_num[%d] (%d>%d)", i_blocks[i], i_tasks[i], m_tasks_num[i_blocks[i]])
+			AFERRAR("ListTasks::updateTasks: task >= m_tasks_num[%d] (%d>=%d)", i_blocks[i], i_tasks[i], m_tasks_num[i_blocks[i]])
 			return false;
 		}
 		m_tasks[i_blocks[i]][i_tasks[i]]->upProgress( i_tps[i]);
@@ -545,14 +572,17 @@ void ListTasks::setWindowTitleProgress()
 void ListTasks::actTaskOpen()
 {
 	Item * item = getCurrentItem();
-	if( item->getId() != ItemJobTask::ItemId )
+	if (item->getType() != Item::TTask)
 		return;
 
-	openTask( (ItemJobTask*)item);
+	openTask(static_cast<ItemJobTask*>(item));
 }
 
-void ListTasks::actTasksSkip()    { tasksOperation("skip"); }
-void ListTasks::actTasksRestart() { tasksOperation("restart"); }
+void ListTasks::actTasksSkip()   {tasksOperation("skip");   }
+void ListTasks::actTasksDone()   {tasksOperation("done");   }
+void ListTasks::actTasksRestart(){tasksOperation("restart");}
+void ListTasks::actTaskTryNext() {tasksOperation("trynext","append");}
+void ListTasks::actTaskDoNotTry(){tasksOperation("trynext","remove");}
 
 void ListTasks::openTask( ItemJobTask * i_itemTask)
 {
@@ -569,15 +599,15 @@ void ListTasks::taskWindowClosed( WndTask * i_wndtask)
 			it++;
 }
 
-void ListTasks::doubleClicked( Item * item)
+void ListTasks::v_doubleClicked(Item * i_item)
 {
-	if( item->getId() == ItemJobTask::ItemId )
+	if (i_item->getType() == Item::TTask)
 	{
-		openTask( (ItemJobTask*)item);
+		openTask(static_cast<ItemJobTask*>(i_item));
 	}
-	else if( item->getId() == ItemJobBlock::ItemId )
+	else if (i_item->getType() == Item::TBlock)
 	{
-		ItemJobBlock * block = (ItemJobBlock*)item;
+		ItemJobBlock * block = static_cast<ItemJobBlock*>(i_item);
 		int blockNum = block->getNumBlock();
 		bool hide = false == m_blocks[blockNum]->tasksHidded;
 		m_blocks[blockNum]->tasksHidded = hide;
@@ -589,21 +619,25 @@ void ListTasks::doubleClicked( Item * item)
 	}
 }
 
-void ListTasks::tasksOperation( const std::string & i_type)
+void ListTasks::tasksOperation(const std::string & i_type, const std::string & i_mode)
 {
 	std::ostringstream str;
 	af::jsonActionStart( str, "jobs", "", std::vector<int>( 1, m_job_id));
 	str << ",\n\"operation\":{\n\"type\":\"" << i_type << '"';
+	if (i_mode.size())
+		str << ",\n\"mode\":\"" << i_mode << '"';
 	str << ",\n\"task_ids\":[";
 
 	int blockId = -1;
 	// Collect tasks of the same block:
-	const QList<Item*> items( getSelectedItems());
-	for( int i = 0; i < items.count(); i++)
+	const QList<Item*> items(getSelectedItems());
+	for (int i = 0; i < items.count(); i++)
 	{
-		if( items[i]->getId() != ItemJobTask::ItemId ) continue;
+		if (items[i]->getType() != Item::TTask)
+			continue;
+		else
 		{
-			ItemJobTask *itemTask = (ItemJobTask*)items[i];
+			ItemJobTask * itemTask = static_cast<ItemJobTask*>(items[i]);
 			if( blockId == -1 )
 				blockId = itemTask->getBlockNum();
 			else if( blockId != itemTask->getBlockNum())
@@ -627,16 +661,16 @@ void ListTasks::actBlockCommand()
 	QString str = QInputDialog::getText(this, "Change Command", "Enter Command", QLineEdit::Normal, cur, &ok);
 	if( !ok) return;
 	str = afqt::stoq( af::strEscape( afqt::qtos( str)));
-	blockAction( 0, QString("\"params\":{\"command\":\"%1\"}").arg( str), false);
+	blockAction(QString("\"params\":{\"command\":\"%1\"}").arg(str));
 }
 void ListTasks::actBlockWorkingDir()
 {
 	bool ok;
-	QString cur = afqt::stoq(((ItemJobBlock*)( getCurrentItem()))->workingdir);
+	QString cur = afqt::stoq(((ItemJobBlock*)(getCurrentItem()))->getWDirOriginal());
 	QString str = QInputDialog::getText(this, "Change Working Directory", "Enter Directory", QLineEdit::Normal, cur, &ok);
 	if( !ok) return;
 	str = afqt::stoq( af::strEscape( afqt::qtos( str)));
-	blockAction( 0, QString("\"params\":{\"working_directory\":\"%1\"}").arg( str), false);
+	blockAction(QString("\"params\":{\"working_directory\":\"%1\"}").arg(str));
 }
 void ListTasks::actBlockEnvironment()
 {
@@ -649,7 +683,7 @@ void ListTasks::actBlockEnvironment()
     {
         displayError( QString("Invalid name=value pair: ") + str);
     }
-	blockAction( 0, QString("\"params\":{\"environment\":{\"%1\":\"%2\"}}").arg( list[0], list[1]), false);
+	blockAction(QString("\"params\":{\"environment\":{\"%1\":\"%2\"}}").arg(list[0], list[1]));
 }
 void ListTasks::actBlockCmdPost()
 {
@@ -658,12 +692,12 @@ void ListTasks::actBlockCmdPost()
 	QString str = QInputDialog::getText(this, "Change Post Command", "Enter Command", QLineEdit::Normal, cur, &ok);
 	if( !ok) return;
 	str = afqt::stoq( af::strEscape( afqt::qtos( str)));
-	blockAction( 0, QString("\"params\":{\"command_post\":\"%1\"}").arg(str), false);
+	blockAction(QString("\"params\":{\"command_post\":\"%1\"}").arg(str));
 }
 void ListTasks::actBlockFiles()
 {
 	bool ok;
-	QString cur = afqt::stoq( af::strJoin(((ItemJobBlock*)( getCurrentItem()))->files, ";"));
+	QString cur = afqt::stoq( af::strJoin(((ItemJobBlock*)( getCurrentItem()))->getFilesOriginal(), ";"));
 	QString str = QInputDialog::getText(this, "Change Files", "Enter Files", QLineEdit::Normal, cur, &ok);
 	if( !ok) return;
 	QString params = QString("\"params\":{\"files\":[");
@@ -675,7 +709,7 @@ void ListTasks::actBlockFiles()
 	}
 	params += "]}";
 
-	blockAction( 0, params, false);
+	blockAction(params);
 }
 void ListTasks::actBlockService()
 {
@@ -683,7 +717,7 @@ void ListTasks::actBlockService()
 	QString cur = ((ItemJobBlock*)( getCurrentItem()))->service;
 	QString str = QInputDialog::getText(this, "Change Service", "Enter Type", QLineEdit::Normal, cur, &ok);
 	if( !ok) return;
-	blockAction( 0, QString("\"params\":{\"service\":\"%1\"}").arg(str.replace("\"","\\\"")), false);
+	blockAction(QString("\"params\":{\"service\":\"%1\"}").arg(str.replace("\"","\\\"")));
 }
 void ListTasks::actBlockParser()
 {
@@ -691,7 +725,7 @@ void ListTasks::actBlockParser()
 	QString cur = ((ItemJobBlock*)( getCurrentItem()))->parser;
 	QString str = QInputDialog::getText(this, "Change Parser", "Enter Type", QLineEdit::Normal, cur, &ok);
 	if( !ok) return;
-	blockAction( 0, QString("\"params\":{\"parser\":\"%1\"}").arg(str.replace("\"","\\\"")), false);
+	blockAction(QString("\"params\":{\"parser\":\"%1\"}").arg(str.replace("\"","\\\"")));
 }
 
 void ListTasks::actBrowseFolder()
@@ -703,23 +737,20 @@ void ListTasks::actBrowseFolder()
 	QString image;
 	QString wdir;
 
-	int id = item->getId();
-	switch( id)
+	switch (item->getType())
 	{
-	case ItemJobBlock::ItemId:
+	case Item::TBlock:
 	{
-		ItemJobBlock *itemBlock = (ItemJobBlock*)item;
-		af::Service service( itemBlock->files, itemBlock->workingdir);
-		image = afqt::stoq( service.getFiles()[0]);
-		wdir = afqt::stoq( service.getWDir());
+		ItemJobBlock * itemBlock = static_cast<ItemJobBlock*>(item);
+		image = afqt::stoq(itemBlock->getFiles()[0]);
+		wdir = afqt::stoq(itemBlock->getWDir());
 		break;
 	}
-	case ItemJobTask::ItemId:
+	case Item::TTask:
 	{
-		ItemJobTask* taskitem = (ItemJobTask*)item;
-		af::Service service( taskitem->getFiles(), taskitem->getWDir());
-		image = afqt::stoq( service.getFiles()[0]);
-		wdir = afqt::stoq( service.getWDir());
+		ItemJobTask* itemTask = static_cast<ItemJobTask*>(item);
+		image = afqt::stoq(itemTask->getFiles()[0]);
+		wdir = afqt::stoq(itemTask->getWDir());
 		break;
 	}
 	default:
@@ -729,95 +760,88 @@ void ListTasks::actBrowseFolder()
 	Watch::browseImages( image, wdir);
 }
 
-void ListTasks::actTaskPreview( int num_cmd, int num_img)
+void ListTasks::actTaskPreview(int i_num_cmd, int i_num_img)
 {
 	Item* item = getCurrentItem();
-	if( item == NULL )
+	if (item == NULL)
 	{
-		displayError( "No items selected.");
+		displayError("No items selected.");
 		return;
 	}
-	if( item->getId() != ItemJobTask::ItemId)
+	if (item->getType() != Item::TTask)
 	{
-		displayWarning( "This action for task only.");
+		displayWarning("This action for task only.");
 		return;
 	}
 
 	ItemJobTask* taskitem = (ItemJobTask*)item;
-	af::Service service( taskitem->getFiles(), taskitem->getWDir());
-
-	std::vector<std::string> images = service.getFiles();
-	if( num_img >= images.size())
+	std::vector<std::string> images = taskitem->getFiles();
+	if (i_num_img >= images.size())
 	{
-		displayError( "No such image number.");
-		return;
-	}
-	QString arg = afqt::stoq( images[num_img]);
-	QString wdir( afqt::stoq( service.getWDir()));
-
-	if( arg.isEmpty()) return;
-	if( num_cmd >= af::Environment::getPreviewCmds().size())
-	{
-		displayError( "No such command number.");
+		displayError("No such image number.");
 		return;
 	}
 
-	QString cmd( afqt::stoq( af::Environment::getPreviewCmds()[num_cmd]));
-	cmd = cmd.replace( AFWATCH::CMDS_ARGUMENT, arg);
+	QString arg = afqt::stoq(images[i_num_img]);
+	if (arg.isEmpty())
+		return;
+
+	if (i_num_cmd >= af::Environment::getPreviewCmds().size())
+	{
+		displayError("No such command number.");
+		return;
+	}
+
+	QString cmd(afqt::stoq(af::Environment::getPreviewCmds()[i_num_cmd]));
+	cmd = cmd.replace(AFWATCH::CMDS_ARGUMENT, arg);
 	QStringList cmdSplit = cmd.split("|");
 
-	Watch::startProcess( cmdSplit.last(), wdir);
+	Watch::startProcess(cmdSplit.last(), afqt::stoq(taskitem->getWDir()));
 }
 
 void ListTasks::actBlockPreview( int num_cmd, int num_img)
 {
     Item* item = getCurrentItem();
-    if( item == NULL )
+    if (item == NULL)
     {
-        displayError( "No items selected.");
+        displayError("No items selected.");
         return;
     }
-    if( item->getId() != ItemJobBlock::ItemId)
+    if (item->getType() != Item::TBlock)
     {
-        displayWarning( "This action for block only.");
+        displayWarning("This action for block only.");
         return;
     }
 
     ItemJobBlock* blockitem = (ItemJobBlock*)item;
-    af::Service service( blockitem->files, blockitem->workingdir);
-
-    std::vector<std::string> images = service.getFiles();
-    if( num_img >= images.size())
+    std::vector<std::string> images = blockitem->getFiles();
+    if (num_img >= images.size())
     {
-        displayError( "No such image number.");
-        return;
-    }
-    QString arg = afqt::stoq( images[num_img]);
-    QString wdir( afqt::stoq( service.getWDir()));
-
-    if( arg.isEmpty()) return;
-    if( num_cmd >= af::Environment::getPreviewCmds().size())
-    {
-        displayError( "No such command number.");
+        displayError("No such image number.");
         return;
     }
 
-    QString cmd( afqt::stoq( af::Environment::getPreviewCmds()[num_cmd]));
-    cmd = cmd.replace( AFWATCH::CMDS_ARGUMENT, arg);
+    QString arg = afqt::stoq(images[num_img]);
+    if (arg.isEmpty())
+		return;
+
+    if (num_cmd >= af::Environment::getPreviewCmds().size())
+    {
+        displayError("No such command number.");
+        return;
+    }
+
+    QString cmd(afqt::stoq(af::Environment::getPreviewCmds()[num_cmd]));
+    cmd = cmd.replace(AFWATCH::CMDS_ARGUMENT, arg);
     QStringList cmdSplit = cmd.split("|");
 
-    Watch::startProcess( cmdSplit.last(), wdir);
+    Watch::startProcess(cmdSplit.last(), afqt::stoq(blockitem->getWDir()));
 }
 
-void ListTasks::blockAction( int id_block, QString i_action) { blockAction( id_block, i_action, true); }
-void ListTasks::blockAction( int id_block, const QString & i_action, bool i_query)
+// Block number will be ignored here. Selected blocks will be processed.
+void ListTasks::slot_BlockAction(int i_bnum, QString i_json) {blockAction(i_json);}
+void ListTasks::blockAction(const QString & i_json)
 {
-	if( id_block >= m_blocks_num)
-	{
-		AFERRAR("ListTasks::blockAction: id_block >= m_blocks_num (%d>=%d)", id_block, m_blocks_num)
-		return;
-	}
-
 	std::ostringstream str;
 	af::jsonActionStart( str, "jobs", "", std::vector<int>( 1, m_job_id));
 
@@ -825,26 +849,18 @@ void ListTasks::blockAction( int id_block, const QString & i_action, bool i_quer
 	str << ",\n\"block_ids\":[";
 	const QList<Item*> items( getSelectedItems());
 	int counter = 0;
-	for( int i = 0; i < items.count(); i++)
-		if( items[i]->getId() == ItemJobBlock::ItemId )
+	for (int i = 0; i < items.count(); i++)
+		if (items[i]->getType() == Item::TBlock)
 		{
 			if( counter ) str << ',';
 			str << ((ItemJobBlock*)items[i])->getNumBlock();
 			counter++;
 		}
-	str << ']';
 
-	if( i_query )
-	{
-		if( false == m_blocks[id_block]->blockAction( str, id_block, i_action, this))
-			return;
-	}
-	else
-	{
-		str << ",\n" << i_action.toUtf8().data();
-	}
+	str << "],\n" << afqt::qtos(i_json);
 
 	af::jsonActionFinish( str);
+
 	Watch::sendMsg( af::jsonMsg( str));
 }
 
@@ -854,7 +870,7 @@ bool ListTasks::mousePressed( QMouseEvent * event)
 	if( Item::isItemP( index.data()) == false ) return false;
 
 	Item * item = Item::toItemP( index.data());
-	if( item->getId() == ItemJobBlock::ItemId)
+	if (item->getType() == Item::TBlock)
 		return ((ItemJobBlock*)item)->mousePressed( event->pos(), m_view->visualRect( index));
 
 	if(( QApplication::mouseButtons() == Qt::MidButton ) || ( QApplication::keyboardModifiers() == Qt::AltModifier ))
@@ -893,9 +909,9 @@ void ListTasks::sortBlock( int i_block_num)
 	int start = i_block_num+1;
 	for( int b = 0; b < i_block_num; b++) start += m_tasks_num[b];
 
-	const QList<Item*> selection = getSelectedItems();
+	storeSelection();
 	m_model->setItems( start, (Item**)array, m_tasks_num[i_block_num]);
-	setSelectedItems( selection);
+	reStoreSelection();
 
 	delete [] array;
 }
